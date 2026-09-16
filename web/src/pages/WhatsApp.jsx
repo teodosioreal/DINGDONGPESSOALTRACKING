@@ -14,8 +14,6 @@ export default function WhatsApp() {
   const [codigo, setCodigo] = useState(null);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState(null);
-  const [copiado, setCopiado] = useState(false);
   const [criandoSessao, setCriandoSessao] = useState(false);
 
   useEffect(() => {
@@ -25,7 +23,6 @@ export default function WhatsApp() {
     setCodigo(null);
     carregarCredenciais();
     carregarStatus();
-    api.empresa(empresaId).then((r) => setWebhookSecret(r.empresa.webhook_secret)).catch(() => {});
     const t = setInterval(carregarStatus, 8000);
     return () => clearInterval(t);
   }, [empresaId]);
@@ -204,31 +201,6 @@ export default function WhatsApp() {
         <span className="text-sm font-medium">{status?.conectado ? "Conectado" : "Desconectado"}</span>
         {status?.numero && <span className="text-sm text-slate-500">— {status.numero}</span>}
       </div>
-
-      {webhookSecret && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-2 text-sm font-medium text-amber-900">
-            Configure esta URL no painel da D-API como webhook "Ao receber mensagem" — sem isso as mensagens não chegam aqui:
-          </p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-md bg-white px-3 py-2 text-xs text-slate-700">
-              {`${window.location.origin}/api/public/whatsapp/webhook?empresa=${empresaId}&chave=${webhookSecret}`}
-            </code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(
-                  `${window.location.origin}/api/public/whatsapp/webhook?empresa=${empresaId}&chave=${webhookSecret}`,
-                );
-                setCopiado(true);
-                setTimeout(() => setCopiado(false), 2000);
-              }}
-              className="shrink-0 rounded-md border border-amber-300 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100"
-            >
-              {copiado ? "Copiado!" : "Copiar"}
-            </button>
-          </div>
-        </div>
-      )}
 
       {configurado && !status?.conectado && (
         <div className="rounded-lg border border-slate-200 bg-white p-6">
