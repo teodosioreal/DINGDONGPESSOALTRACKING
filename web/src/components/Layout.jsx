@@ -93,14 +93,16 @@ export default function Layout({ aoSair }) {
 
   return (
     <div className="flex min-h-screen">
-      <button
-        onClick={() => setEscuro((v) => !v)}
-        title={escuro ? "Mudar para o modo claro" : "Mudar para o modo escuro"}
-        className="fixed right-4 top-4 z-50 flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-      >
-        {escuro ? "☀️ Claro" : "🌙 Escuro"}
-      </button>
-      <NotificationCenter empresaId={empresaId} />
+      <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
+        <NotificationCenter empresaId={empresaId} />
+        <button
+          onClick={() => setEscuro((v) => !v)}
+          title={escuro ? "Mudar para o modo claro" : "Mudar para o modo escuro"}
+          className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+        >
+          {escuro ? "☀️ Claro" : "🌙 Escuro"}
+        </button>
+      </div>
       <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="px-5 py-6">
           <span className="text-lg font-semibold tracking-tight">DingDong</span>

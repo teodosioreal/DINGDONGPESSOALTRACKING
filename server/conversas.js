@@ -205,11 +205,11 @@ export function resumoDashboard(empresaId) {
 }
 
 /**
- * Eventos recentes de uma empresa, pra alimentar a central de notificações no
- * frontend (mensagem recebida, palavra-chave detectada, venda enviada ao
- * Google Ads). `desde` é opcional — sem ele, devolve a lista vazia e só serve
- * pra pegar o "agora" do servidor (usado pelo frontend pra "primar" o
- * polling sem disparar notificação de coisa antiga).
+ * Eventos recentes de uma empresa, pra alimentar o sininho de notificações no
+ * frontend (palavra-chave detectada, venda enviada ao Google Ads). `desde` é
+ * opcional — sem ele, devolve a lista vazia e só serve pra pegar o "agora" do
+ * servidor (usado pelo frontend pra "primar" o polling sem disparar
+ * notificação de coisa antiga).
  */
 export function eventosRecentes(empresaId, desde) {
   const agora = db.prepare("SELECT datetime('now') AS agora").get().agora;
@@ -217,18 +217,8 @@ export function eventosRecentes(empresaId, desde) {
 
   // >= (não >): datetime('now') do SQLite só tem resolução de 1 segundo, então
   // um evento no mesmo segundo do "desde" com > ficaria de fora pra sempre.
-  // Prefiro arriscar mostrar um toast duplicado (inofensivo, some sozinho) a
-  // perder uma notificação silenciosamente.
-  const mensagens = db
-    .prepare(
-      `SELECT m.criado_em AS quando, c.nome, c.telefone
-       FROM mensagens m JOIN conversas c ON c.id = m.conversa_id
-       WHERE c.empresa_id = ? AND m.de_mim = 0 AND m.criado_em >= ?
-       ORDER BY m.id ASC LIMIT 30`,
-    )
-    .all(empresaId, desde)
-    .map((r) => ({ tipo: "mensagem", quando: r.quando, nome: r.nome || r.telefone }));
-
+  // Prefiro arriscar mostrar uma notificação duplicada (inofensiva) a
+  // perder uma silenciosamente.
   const provaveis = db
     .prepare(
       `SELECT nome, telefone, valor_sugerido AS valor, atualizado_em AS quando
@@ -249,6 +239,6 @@ export function eventosRecentes(empresaId, desde) {
     .all(empresaId, desde)
     .map((r) => ({ tipo: "venda_enviada", quando: r.quando, nome: r.nome || r.telefone, valor: r.valor }));
 
-  const eventos = [...mensagens, ...provaveis, ...enviadas].sort((a, b) => (a.quando < b.quando ? -1 : 1));
+  const eventos = [...provaveis, ...enviadas].sort((a, b) => (a.quando < b.quando ? -1 : 1));
   return { eventos, agora };
 }

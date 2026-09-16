@@ -2,55 +2,52 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { tocarSinoDingDong, tocarSomDeVenda } from "../lib/sons.js";
 
-const ICONE = { mensagem: "💬", venda_provavel: "🔔", venda_enviada: "💰" };
+const ICONE = { venda_provavel: "🔔", venda_enviada: "💰" };
+const FORMATADOR_VALOR = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function titulo(evento) {
-  if (evento.tipo === "venda_provavel") {
-    return `Palavra-chave detectada: ${evento.nome}${evento.valor ? ` — R$ ${Number(evento.valor).toFixed(2)}` : ""}`;
-  }
-  if (evento.tipo === "venda_enviada") {
-    return `Venda enviada ao Google Ads: ${evento.nome}${evento.valor ? ` — R$ ${Number(evento.valor).toFixed(2)}` : ""}`;
-  }
-  return `Nova mensagem de ${evento.nome}`;
+  const valor = evento.valor ? ` — ${FORMATADOR_VALOR.format(Number(evento.valor))}` : "";
+  if (evento.tipo === "venda_enviada") return `Venda enviada ao Google Ads: ${evento.nome}${valor}`;
+  return `Palavra-chave detectada: ${evento.nome}${valor}`;
 }
 
-function corDoToast(tipo) {
-  if (tipo === "venda_enviada") {
-    return "border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950/90 dark:text-green-300";
-  }
-  if (tipo === "venda_provavel") {
-    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/90 dark:text-amber-300";
-  }
-  return "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200";
+function tempoRelativo(quando) {
+  const iso = quando.includes("T") ? quando : `${quando.replace(" ", "T")}Z`;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return "agora mesmo";
+  if (min < 60) return `há ${min} min`;
+  const horas = Math.round(min / 60);
+  if (horas < 24) return `há ${horas}h`;
+  return `há ${Math.round(horas / 24)} dia(s)`;
 }
 
 export default function NotificationCenter({ empresaId }) {
-  const [toasts, setToasts] = useState([]);
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [naoLidas, setNaoLidas] = useState(0);
+  const [aberto, setAberto] = useState(false);
   const desdeRef = useRef(null);
   const idRef = useRef(0);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     desdeRef.current = null;
-    setToasts([]);
+    setNotificacoes([]);
+    setNaoLidas(0);
+    setAberto(false);
     if (!empresaId) return;
 
     let cancelado = false;
-
-    function adicionarToast(evento) {
-      const id = ++idRef.current;
-      setToasts((atual) => [...atual, { id, ...evento }]);
-      setTimeout(() => {
-        setToasts((atual) => atual.filter((t) => t.id !== id));
-      }, 6000);
-    }
 
     async function poll() {
       try {
         const r = await api.eventosRecentes(empresaId, desdeRef.current);
         if (cancelado) return;
-        if (desdeRef.current !== null) {
+        if (desdeRef.current !== null && r.eventos.length > 0) {
+          const novas = r.eventos.map((e) => ({ id: ++idRef.current, ...e })).reverse();
+          setNotificacoes((atual) => [...novas, ...atual].slice(0, 30));
+          setNaoLidas((atual) => atual + r.eventos.length);
           for (const evento of r.eventos) {
-            adicionarToast(evento);
             if (evento.tipo === "venda_provavel") tocarSinoDingDong();
             if (evento.tipo === "venda_enviada") tocarSomDeVenda();
           }
@@ -69,17 +66,62 @@ export default function NotificationCenter({ empresaId }) {
     };
   }, [empresaId]);
 
-  if (toasts.length === 0) return null;
+  useEffect(() => {
+    if (!aberto) return;
+    function aoClicarFora(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setAberto(false);
+    }
+    document.addEventListener("mousedown", aoClicarFora);
+    return () => document.removeEventListener("mousedown", aoClicarFora);
+  }, [aberto]);
+
+  if (!empresaId) return null;
+
+  function alternar() {
+    setAberto((v) => {
+      const abrir = !v;
+      if (abrir) setNaoLidas(0);
+      return abrir;
+    });
+  }
 
   return (
-    <div className="fixed right-4 top-16 z-50 flex w-72 flex-col gap-2">
-      {toasts.map((t) => (
-        <div key={t.id} className={`rounded-lg border px-3 py-2 text-sm shadow-lg ${corDoToast(t.tipo)}`}>
-          <p className="font-medium">
-            {ICONE[t.tipo]} {titulo(t)}
-          </p>
+    <div ref={containerRef} className="relative">
+      <button
+        onClick={alternar}
+        title="Notificações"
+        className="relative flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+      >
+        🔔
+        {naoLidas > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+            {naoLidas > 9 ? "9+" : naoLidas}
+          </span>
+        )}
+      </button>
+
+      {aberto && (
+        <div className="absolute right-0 top-10 max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            Notificações
+          </div>
+          {notificacoes.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-slate-400 dark:text-slate-500">Nenhuma notificação ainda.</p>
+          ) : (
+            notificacoes.map((n) => (
+              <div
+                key={n.id}
+                className="border-b border-slate-50 px-3 py-2 text-sm last:border-0 dark:border-slate-800/60"
+              >
+                <p className="text-slate-700 dark:text-slate-200">
+                  {ICONE[n.tipo]} {titulo(n)}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{tempoRelativo(n.quando)}</p>
+              </div>
+            ))
+          )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
