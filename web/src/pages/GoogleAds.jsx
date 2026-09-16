@@ -4,6 +4,8 @@ import { api } from "../lib/api.js";
 export default function GoogleAds() {
   const [status, setStatus] = useState(null);
   const [contas, setContas] = useState(null);
+  const [mccAberta, setMccAberta] = useState(null); // MCC sendo explorada, ou null pra lista principal
+  const [subcontas, setSubcontas] = useState(null);
   const [campanhas, setCampanhas] = useState(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -39,11 +41,14 @@ export default function GoogleAds() {
     await api.googleDesconectar();
     setStatus({ conectado: false });
     setContas(null);
+    setMccAberta(null);
+    setSubcontas(null);
     setCampanhas(null);
   }
 
   async function carregarContas() {
     setOcupado(true);
+    setErro("");
     try {
       const r = await api.googleContas();
       setContas(r.contas);
@@ -54,9 +59,32 @@ export default function GoogleAds() {
     }
   }
 
-  async function escolherConta(conta) {
-    await api.googleEscolherConta(conta.customerId, conta.nome);
-    await carregarStatus();
+  async function abrirConta(conta) {
+    if (conta.isManager) {
+      setOcupado(true);
+      setErro("");
+      try {
+        const r = await api.googleSubcontas(conta.customerId);
+        setMccAberta(conta);
+        setSubcontas(r.contas);
+      } catch (e) {
+        setErro(e.message);
+      } finally {
+        setOcupado(false);
+      }
+      return;
+    }
+    await escolherConta(conta, null);
+  }
+
+  async function escolherConta(conta, mcc) {
+    setErro("");
+    try {
+      await api.googleEscolherConta(conta.customerId, conta.nome, mcc?.customerId);
+      await carregarStatus();
+    } catch (e) {
+      setErro(e.message);
+    }
   }
 
   async function carregarCampanhas() {
@@ -67,6 +95,8 @@ export default function GoogleAds() {
       setErro(e.message);
     }
   }
+
+  const listaAtual = mccAberta ? subcontas : contas;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -105,20 +135,39 @@ export default function GoogleAds() {
 
       {status?.conectado && !status.customerId && (
         <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <p className="mb-3 text-sm font-medium">Escolha a conta do Google Ads</p>
-          {ocupado && <p className="text-sm text-slate-500">Carregando contas…</p>}
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-medium">
+              {mccAberta ? `Contas dentro de ${mccAberta.nome}` : "Escolha a conta do Google Ads"}
+            </p>
+            {mccAberta && (
+              <button
+                onClick={() => {
+                  setMccAberta(null);
+                  setSubcontas(null);
+                }}
+                className="text-sm text-slate-500 hover:underline"
+              >
+                ← voltar
+              </button>
+            )}
+          </div>
+          {ocupado && <p className="text-sm text-slate-500">Carregando…</p>}
           <ul className="space-y-2">
-            {(contas ?? []).map((c) => (
+            {(listaAtual ?? []).map((c) => (
               <li key={c.customerId}>
                 <button
-                  onClick={() => escolherConta(c)}
+                  onClick={() => (mccAberta ? escolherConta(c, mccAberta) : abrirConta(c))}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 >
                   {c.nome} <span className="text-slate-400">({c.customerId})</span>
+                  {c.isManager && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">MCC</span>}
                 </button>
               </li>
             ))}
           </ul>
+          {listaAtual && listaAtual.length === 0 && (
+            <p className="text-sm text-slate-500">Nenhuma conta encontrada aqui.</p>
+          )}
         </div>
       )}
 

@@ -25,7 +25,7 @@ Você vai precisar, fora do servidor:
    - Anotar o **Client ID** e o **Client Secret**.
    - Ativar a "Google Ads API" no projeto.
 3. **Developer Token do Google Ads** — na sua conta Google Ads, em Ferramentas e Configurações → Central da API. Se ele só tiver acesso "Test accounts", conversões só funcionam em contas de teste até você solicitar o acesso Básico.
-   - Se você pegou esse token dentro de uma **MCC (conta gerenciadora)**, anote também o **número da MCC** (10 dígitos) — vai no `GOOGLE_ADS_LOGIN_CUSTOMER_ID` do `.env`. Sem isso as chamadas na conta de anúncio real tendem a falhar com erro de permissão.
+   - Não precisa anotar número de MCC — a tela Google Ads do painel lista as contas/MCCs acessíveis e deixa escolher, funciona com qualquer uma.
 4. **Conta D-API** com um número de WhatsApp — anotar o **Session ID** e a **API Key** (esses dois NÃO vão pro `.env`, você preenche direto na tela WhatsApp do painel depois que o app estiver no ar).
 5. No dashboard da D-API, configurar o webhook "Ao receber mensagem" para: `https://SEUDOMINIO/api/public/whatsapp/webhook?chave=SEGREDO_QUE_VOCE_ESCOLHER` (o mesmo valor vai no `WHATSAPP_WEBHOOK_SECRET` do `.env`).
 
@@ -77,7 +77,6 @@ ADMIN_PASSWORD_HASH=<gere no passo abaixo>
 GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_ADS_DEVELOPER_TOKEN=...
-GOOGLE_ADS_LOGIN_CUSTOMER_ID=...   # só se o developer token for de uma MCC
 
 DAPI_BASE_URL=https://api.d-api.cloud
 WHATSAPP_WEBHOOK_SECRET=<o mesmo que você colocou na URL do webhook da D-API>
@@ -164,7 +163,7 @@ O Certbot já ajusta o Nginx pra redirecionar HTTP → HTTPS e agenda a renovaç
 ## 6. Testar de ponta a ponta
 
 1. Abra `https://SEUDOMINIO/login` e entre com o usuário/senha configurados.
-2. Vá em **Google Ads** → Conectar conta → autorize com sua conta Google → escolha a conta de anúncios.
+2. Vá em **Google Ads** → Conectar conta → autorize com sua conta Google → escolha a conta de anúncios (se aparecer marcada como "MCC", clique pra ver as contas de dentro dela e escolha a conta de anúncio de verdade).
 3. Vá em **WhatsApp** → cole o Session ID e a API Key da D-API → Salvar → gere o QR Code → escaneie com o celular.
    - Se o status/QR Code não carregar, os caminhos exatos da API da D-API podem ser diferentes dos que usei em `server/whatsapp.js` (marcado em comentário no arquivo) — confira a documentação da D-API e ajusta ali.
 4. Vá em **Instalar Rastreio** → copie o script → cole no `<head>` do seu site.

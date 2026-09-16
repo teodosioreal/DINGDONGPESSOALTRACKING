@@ -21,8 +21,9 @@ export const api = {
   googleAuthUrl: () => chamar("/api/google/auth-url"),
   googleDesconectar: () => chamar("/api/google/desconectar", { method: "POST" }),
   googleContas: () => chamar("/api/google/contas"),
-  googleEscolherConta: (customerId, nome) =>
-    chamar("/api/google/contas/escolher", { method: "POST", body: { customerId, nome } }),
+  googleSubcontas: (mccId) => chamar(`/api/google/contas/${mccId}/subcontas`),
+  googleEscolherConta: (customerId, nome, loginCustomerId) =>
+    chamar("/api/google/contas/escolher", { method: "POST", body: { customerId, nome, loginCustomerId } }),
   googleCampanhas: () => chamar("/api/google/campanhas"),
 
   whatsappStatus: () => chamar("/api/whatsapp/status"),

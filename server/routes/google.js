@@ -9,6 +9,7 @@ import {
   salvarContaEscolhida,
   desconectarGoogle,
   listarContas,
+  listarSubcontasDe,
   listarCampanhas,
 } from "../googleAds.js";
 
@@ -41,10 +42,18 @@ googleRouter.get("/contas", async (_req, res) => {
   res.json({ contas: r.contas });
 });
 
+/** Subcontas de uma MCC específica — usado quando a conta escolhida é gerenciadora. */
+googleRouter.get("/contas/:mccId/subcontas", async (req, res) => {
+  if (!/^\d+$/.test(req.params.mccId)) return res.status(400).json({ erro: "MCC inválida." });
+  const r = await listarSubcontasDe(req.params.mccId);
+  if (r.erro) return res.status(400).json({ erro: r.erro });
+  res.json({ contas: r.contas });
+});
+
 googleRouter.post("/contas/escolher", (req, res) => {
-  const { customerId, nome } = req.body ?? {};
+  const { customerId, nome, loginCustomerId } = req.body ?? {};
   if (!customerId) return res.status(400).json({ erro: "customerId obrigatório." });
-  salvarContaEscolhida({ customerId, nome });
+  salvarContaEscolhida({ customerId, nome, loginCustomerId });
   res.json({ ok: true });
 });
 
