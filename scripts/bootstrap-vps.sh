@@ -62,9 +62,11 @@ systemctl daemon-reload
 systemctl enable dingdong
 
 echo ">> Configurando o Nginx..."
+rm -f /etc/nginx/sites-enabled/default
 cat > /etc/nginx/sites-available/dingdong <<EOF
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name $DOMAIN www.$DOMAIN;
 
     location / {
