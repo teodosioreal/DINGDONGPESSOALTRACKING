@@ -1,6 +1,17 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api.js";
 
+function formatarBuild() {
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(__BUILD_TIME__));
+  } catch {
+    return "desconhecida";
+  }
+}
+
 const itens = [
   { to: "/app", label: "Painel", fim: true },
   { to: "/app/conversas", label: "Conversas" },
@@ -40,13 +51,14 @@ export default function Layout({ aoSair }) {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3">
+        <div className="space-y-2 p-3">
           <button
             onClick={sair}
             className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-100"
           >
             Sair
           </button>
+          <p className="px-3 text-xs text-slate-400">Última atualização: {formatarBuild()}</p>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8">
