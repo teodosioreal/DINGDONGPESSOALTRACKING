@@ -9,6 +9,11 @@
  *  - GET /api/v1/sessions/{id}/connect  → força reconexão (quando o QR expira)
  * Os demais (/pairing-code, /disconnect, /send-text) ainda são um chute
  * baseado no padrão da API — confirme na documentação se algo der 404.
+ *
+ * Webhook inbound (messages.received) confirmado na documentação: o
+ * telefone vem em data.from.jid (ex: "5511999999999@s.whatsapp.net"), o
+ * texto em data.message, nome do remetente em data.from_name, e is_group /
+ * fromMe como booleanos — ver normalizarPayloadInbound() abaixo.
  */
 import { db } from "./db.js";
 
@@ -138,15 +143,21 @@ export function empresaDoWebhook(req) {
   return dif === 0 ? empresa : null;
 }
 
-/** Normaliza os formatos de payload mais comuns de webhook da D-API. */
+/**
+ * Normaliza o payload do webhook messages.received da D-API (confirmado na
+ * documentação oficial). Outros eventos (connection.status, chats.upsert etc.)
+ * chegam na mesma URL quando o modo é "single" — são ignorados aqui.
+ */
 export function normalizarPayloadInbound(bruto) {
   const cru = bruto ?? {};
+  if (cru.event && cru.event !== "messages.received") {
+    return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined };
+  }
   const dado = typeof cru.data === "object" && cru.data ? cru.data : cru;
-  const chat = typeof dado.chat === "object" && dado.chat ? dado.chat : {};
-  const telefone = String(dado.phone ?? dado.fromNumber ?? "").replace(/\D/g, "");
-  const texto = String(dado.text?.message ?? dado.body ?? dado.message ?? "");
-  const deMim = dado.fromMe === true || dado.flow === "outbound";
-  const grupo = dado.isGroup === true || chat.type === "group" || String(dado.chatId ?? "").includes("@g.us");
-  const nome = dado.senderName ?? dado.pushname ?? undefined;
+  const telefone = String(dado.from?.jid ?? "").split("@")[0].replace(/\D/g, "");
+  const texto = String(dado.message ?? "");
+  const deMim = dado.fromMe === true;
+  const grupo = dado.is_group === true;
+  const nome = dado.from_name ?? dado.from?.name ?? undefined;
   return { telefone, texto, deMim, grupo, nome };
 }
