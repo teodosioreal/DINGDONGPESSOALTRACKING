@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
+import NotificationCenter from "./NotificationCenter.jsx";
 
 function formatarBuild() {
   try {
@@ -99,6 +100,7 @@ export default function Layout({ aoSair }) {
       >
         {escuro ? "☀️ Claro" : "🌙 Escuro"}
       </button>
+      <NotificationCenter empresaId={empresaId} />
       <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="px-5 py-6">
           <span className="text-lg font-semibold tracking-tight">DingDong</span>

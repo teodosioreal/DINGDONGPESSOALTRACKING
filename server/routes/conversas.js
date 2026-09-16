@@ -10,6 +10,7 @@ import {
   listarFila,
   enviarVendaAgora,
   cancelarEnvio,
+  eventosRecentes,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup } from "../db.js";
@@ -22,6 +23,11 @@ conversasRouter.get("/", (req, res) => {
 
 conversasRouter.get("/nao-lidas", (req, res) => {
   res.json({ total: contarConversasNaoLidas(req.empresaId) });
+});
+
+/** Eventos recentes (mensagem recebida/venda provável/venda enviada) pra central de notificações. */
+conversasRouter.get("/eventos-recentes", (req, res) => {
+  res.json(eventosRecentes(req.empresaId, req.query.desde ? String(req.query.desde) : null));
 });
 
 conversasRouter.get("/:id/mensagens", (req, res) => {
@@ -38,7 +44,7 @@ conversasRouter.post("/:id/mensagens", async (req, res) => {
   if (!texto) return res.status(400).json({ erro: "Mensagem vazia." });
   const r = await enviarMensagem(req.empresaId, conversa.telefone, texto);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
-  registrarMensagemEnviada(req.empresaId, { telefone: conversa.telefone, texto });
+  await registrarMensagemEnviada(req.empresa, { telefone: conversa.telefone, texto, nome: conversa.nome });
   res.json({ ok: true });
 });
 

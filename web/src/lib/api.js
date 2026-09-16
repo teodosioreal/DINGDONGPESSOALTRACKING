@@ -66,6 +66,10 @@ export const api = {
   // ---- Conversas ----
   conversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`),
   conversasNaoLidas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas/nao-lidas`),
+  eventosRecentes: (empresaId, desde) =>
+    chamar(
+      `/api/empresas/${empresaId}/conversas/eventos-recentes${desde ? `?desde=${encodeURIComponent(desde)}` : ""}`,
+    ),
   conversa: (empresaId, id) => chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`),
   enviarMensagem: (empresaId, id, texto) =>
     chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`, { method: "POST", body: { texto } }),

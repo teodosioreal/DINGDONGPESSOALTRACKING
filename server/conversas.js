@@ -36,6 +36,39 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
 
   db.prepare("INSERT INTO mensagens (conversa_id, de_mim, texto) VALUES (?, 0, ?)").run(conversa.id, texto);
   db.prepare("UPDATE conversas SET nao_lida = 1, atualizado_em = datetime('now') WHERE id = ?").run(conversa.id);
+
+  return db.prepare("SELECT * FROM conversas WHERE id = ?").get(conversa.id);
+}
+
+/** Evita registrar/detectar a mesma mensagem enviada duas vezes (ex: eco do webhook de uma mensagem que a gente mesma já mandou pelo painel). */
+function mensagemEnviadaDuplicadaRecente(conversaId, texto) {
+  return Boolean(
+    db
+      .prepare(
+        `SELECT id FROM mensagens
+         WHERE conversa_id = ? AND de_mim = 1 AND texto = ? AND criado_em >= datetime('now', '-15 seconds')
+         ORDER BY id DESC LIMIT 1`,
+      )
+      .get(conversaId, texto),
+  );
+}
+
+/**
+ * Processa uma mensagem ENVIADA pela empresa pro cliente (pelo painel ou
+ * direto do celular conectado) — a detecção de venda por palavra-chave roda
+ * aqui: é a frase que a empresa manda pra confirmar a venda (ex: "pagamento
+ * confirmado") que dispara, não o que o cliente escreve.
+ */
+export async function registrarMensagemEnviada(empresa, { telefone, texto, nome }) {
+  const empresaId = empresa.id;
+  let conversa = conversaDoTelefone(empresaId, telefone, nome);
+
+  if (mensagemEnviadaDuplicadaRecente(conversa.id, texto)) {
+    return conversa;
+  }
+
+  db.prepare("INSERT INTO mensagens (conversa_id, de_mim, texto) VALUES (?, 1, ?)").run(conversa.id, texto);
+  db.prepare("UPDATE conversas SET atualizado_em = datetime('now') WHERE id = ?").run(conversa.id);
   conversa = db.prepare("SELECT * FROM conversas WHERE id = ?").get(conversa.id);
 
   if (conversa.status === "lead") {
@@ -52,11 +85,6 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
   }
 
   return db.prepare("SELECT * FROM conversas WHERE id = ?").get(conversa.id);
-}
-
-export function registrarMensagemEnviada(empresaId, { telefone, texto }) {
-  const conversa = conversaDoTelefone(empresaId, telefone);
-  db.prepare("INSERT INTO mensagens (conversa_id, de_mim, texto) VALUES (?, 1, ?)").run(conversa.id, texto);
 }
 
 export function listarConversas(empresaId) {
@@ -174,4 +202,53 @@ export function resumoDashboard(empresaId) {
     porOrigem,
     moeda: empresa?.moeda ?? "BRL",
   };
+}
+
+/**
+ * Eventos recentes de uma empresa, pra alimentar a central de notificações no
+ * frontend (mensagem recebida, palavra-chave detectada, venda enviada ao
+ * Google Ads). `desde` é opcional — sem ele, devolve a lista vazia e só serve
+ * pra pegar o "agora" do servidor (usado pelo frontend pra "primar" o
+ * polling sem disparar notificação de coisa antiga).
+ */
+export function eventosRecentes(empresaId, desde) {
+  const agora = db.prepare("SELECT datetime('now') AS agora").get().agora;
+  if (!desde) return { eventos: [], agora };
+
+  // >= (não >): datetime('now') do SQLite só tem resolução de 1 segundo, então
+  // um evento no mesmo segundo do "desde" com > ficaria de fora pra sempre.
+  // Prefiro arriscar mostrar um toast duplicado (inofensivo, some sozinho) a
+  // perder uma notificação silenciosamente.
+  const mensagens = db
+    .prepare(
+      `SELECT m.criado_em AS quando, c.nome, c.telefone
+       FROM mensagens m JOIN conversas c ON c.id = m.conversa_id
+       WHERE c.empresa_id = ? AND m.de_mim = 0 AND m.criado_em >= ?
+       ORDER BY m.id ASC LIMIT 30`,
+    )
+    .all(empresaId, desde)
+    .map((r) => ({ tipo: "mensagem", quando: r.quando, nome: r.nome || r.telefone }));
+
+  const provaveis = db
+    .prepare(
+      `SELECT nome, telefone, valor_sugerido AS valor, atualizado_em AS quando
+       FROM conversas
+       WHERE empresa_id = ? AND status = 'venda_provavel' AND atualizado_em >= ?
+       ORDER BY atualizado_em ASC LIMIT 30`,
+    )
+    .all(empresaId, desde)
+    .map((r) => ({ tipo: "venda_provavel", quando: r.quando, nome: r.nome || r.telefone, valor: r.valor }));
+
+  const enviadas = db
+    .prepare(
+      `SELECT nome, telefone, valor, atualizado_em AS quando
+       FROM conversas
+       WHERE empresa_id = ? AND fila_status = 'enviado' AND conversao_enviada = 1 AND atualizado_em >= ?
+       ORDER BY atualizado_em ASC LIMIT 30`,
+    )
+    .all(empresaId, desde)
+    .map((r) => ({ tipo: "venda_enviada", quando: r.quando, nome: r.nome || r.telefone, valor: r.valor }));
+
+  const eventos = [...mensagens, ...provaveis, ...enviadas].sort((a, b) => (a.quando < b.quando ? -1 : 1));
+  return { eventos, agora };
 }

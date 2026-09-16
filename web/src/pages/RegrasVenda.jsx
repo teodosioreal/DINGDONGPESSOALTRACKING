@@ -39,10 +39,16 @@ export default function RegrasVenda() {
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Regras de venda</h1>
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        Quando uma mensagem recebida no WhatsApp bater com uma dessas palavras/frases, a conversa é marcada como
-        venda. Se conseguirmos identificar um valor em reais na própria mensagem (ex: "R$ 150" ou "150 reais") e a
-        opção abaixo estiver desligada, a conversão já é enviada pro Google Ads automaticamente — senão, fica
-        esperando você confirmar em <strong>Conversas</strong>.
+        A frase-gatilho é a que <strong>sua empresa manda pro cliente</strong> pra confirmar a venda — tipo
+        "Pagamento confirmado, obrigado!" ou "Recebemos seu PIX" — não o que o cliente escreve. Isso vale tanto pra
+        mensagem mandada pelo painel quanto direto do celular conectado. Quando bater com uma dessas frases, a
+        conversa é marcada como venda. Se conseguirmos identificar um valor em reais na própria mensagem (ex: "R$
+        150" ou "150 reais") e a opção abaixo estiver desligada, a conversão já é enviada pro Google Ads
+        automaticamente — senão, fica esperando você confirmar em <strong>Conversas</strong>.
+      </p>
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Quando o sistema detecta a frase, toca um sininho 🔔 — e quando a venda é enviada pro Google Ads, toca um
+        som de venda 💰. As notificações aparecem no canto superior direito, em qualquer tela.
       </p>
 
       {erro && (
@@ -62,13 +68,15 @@ export default function RegrasVenda() {
       >
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Palavras/frases-gatilho
+            Frases que a empresa manda pra confirmar a venda
           </label>
           <textarea
             value={palavrasChave}
             onChange={(e) => setPalavrasChave(e.target.value)}
             rows={6}
-            placeholder={"Uma por linha (ou separadas por vírgula), por exemplo:\npagamento confirmado\npix recebido\ncomprovante"}
+            placeholder={
+              "Uma por linha (ou separadas por vírgula), por exemplo:\npagamento confirmado, obrigado\nrecebemos seu pix\nvenda registrada com sucesso"
+            }
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           />
         </div>

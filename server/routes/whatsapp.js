@@ -12,7 +12,7 @@ import {
   limparCredenciais,
   criarSessaoAutomatica,
 } from "../whatsapp.js";
-import { registrarMensagemRecebida } from "../conversas.js";
+import { registrarMensagemRecebida, registrarMensagemEnviada } from "../conversas.js";
 
 export const whatsappRouter = Router({ mergeParams: true });
 
@@ -83,12 +83,18 @@ whatsappWebhookRouter.post("/webhook", async (req, res) => {
   }
 
   const { telefone, texto, deMim, grupo, nome } = normalizarPayloadInbound(req.body);
-  if (!telefone || deMim || grupo) return res.send("ignorado");
+  if (!telefone || grupo) return res.send("ignorado");
 
   try {
-    await registrarMensagemRecebida(empresa, { telefone, texto, nome });
+    // Mensagens "de mim" (mandadas pela empresa, pelo painel ou direto do
+    // celular conectado) são onde roda a detecção de venda por palavra-chave.
+    if (deMim) {
+      await registrarMensagemEnviada(empresa, { telefone, texto, nome });
+    } else {
+      await registrarMensagemRecebida(empresa, { telefone, texto, nome });
+    }
   } catch (e) {
-    console.error("Falha ao registrar mensagem recebida", e);
+    console.error("Falha ao registrar mensagem", e);
   }
   res.send("ok");
 });
