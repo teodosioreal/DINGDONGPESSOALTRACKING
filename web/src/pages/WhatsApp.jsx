@@ -7,8 +7,6 @@ export default function WhatsApp() {
   const { empresaId } = useParams();
   const [status, setStatus] = useState(null);
   const [credenciais, setCredenciais] = useState(null);
-  const [sessionId, setSessionId] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [qr, setQr] = useState(null);
   const [telefone, setTelefone] = useState("");
   const [codigo, setCodigo] = useState(null);
@@ -56,29 +54,12 @@ export default function WhatsApp() {
   }, [empresaId, credenciais?.temApiKey, status?.conectado]);
 
   async function carregarCredenciais() {
-    const r = await api.whatsappCredenciais(empresaId);
-    setCredenciais(r);
-    setSessionId(r.sessionId ?? "");
+    setCredenciais(await api.whatsappCredenciais(empresaId));
   }
 
   async function carregarStatus() {
     try {
       setStatus(await api.whatsappStatus(empresaId));
-    } catch (e) {
-      setErro(e.message);
-    }
-  }
-
-  async function salvarCredenciais(e) {
-    e.preventDefault();
-    setErro("");
-    setAviso("");
-    try {
-      await api.whatsappSalvarCredenciais(empresaId, sessionId, apiKey);
-      setApiKey("");
-      setAviso("Credenciais salvas.");
-      await carregarCredenciais();
-      await carregarStatus();
     } catch (e) {
       setErro(e.message);
     }
@@ -101,9 +82,9 @@ export default function WhatsApp() {
   }
 
   async function removerCredenciais() {
+    const confirmou = window.confirm("Remover esta sessão? Você vai precisar criar uma nova pra reconectar.");
+    if (!confirmou) return;
     await api.whatsappRemoverCredenciais(empresaId);
-    setSessionId("");
-    setApiKey("");
     setQr(null);
     setCodigo(null);
     await carregarCredenciais();
@@ -159,47 +140,15 @@ export default function WhatsApp() {
         </div>
       )}
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-700">
-          {configurado ? "Credenciais da D-API" : "Ou preencha manualmente"}
-        </h2>
-        <form onSubmit={salvarCredenciais} className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">Session ID</label>
-            <input
-              value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Session ID fornecido pela D-API"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-slate-600">API Key</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder={configurado ? "•••••••• (já salva — digite para trocar)" : "API Key fornecida pela D-API"}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <button type="submit" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              Salvar credenciais
-            </button>
-            {configurado && (
-              <button type="button" onClick={removerCredenciais} className="text-sm font-medium text-red-600 hover:underline">
-                Remover
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-
       <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4">
         <span className={`size-2.5 rounded-full ${status?.conectado ? "bg-green-500" : "bg-red-500"}`} />
         <span className="text-sm font-medium">{status?.conectado ? "Conectado" : "Desconectado"}</span>
         {status?.numero && <span className="text-sm text-slate-500">— {status.numero}</span>}
+        {configurado && !status?.conectado && (
+          <button onClick={removerCredenciais} className="ml-auto text-xs font-medium text-red-600 hover:underline">
+            Remover sessão
+          </button>
+        )}
       </div>
 
       {configurado && !status?.conectado && (
