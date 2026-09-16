@@ -13,6 +13,7 @@ import { conversasRouter, dashboardRouter } from "./routes/conversas.js";
 import { ipBloqueioRouter } from "./routes/ipBloqueio.js";
 import { carregarEmpresa } from "./routes/empresaMiddleware.js";
 import { exigirSessao } from "./auth.js";
+import { iniciarAgendadorDeEnvio } from "./filaDeEnvio.js";
 
 const obrigatorias = ["SESSION_SECRET", "ADMIN_USER", "ADMIN_PASSWORD_HASH", "APP_PUBLIC_URL"];
 const faltando = obrigatorias.filter((v) => !process.env[v]);
@@ -53,3 +54,5 @@ const porta = Number(process.env.PORT ?? 3000);
 app.listen(porta, () => {
   console.log(`DingDong pessoal rodando em http://127.0.0.1:${porta}`);
 });
+
+iniciarAgendadorDeEnvio();

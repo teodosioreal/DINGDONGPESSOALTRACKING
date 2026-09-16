@@ -1,7 +1,8 @@
-import { db, ipEstaBloqueado } from "./db.js";
+import { db, ipEstaBloqueado, marcarEnvioResultado, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
 import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
 import { enviarConversaoGoogle } from "./googleAds.js";
+import { proximoHorarioEnvio, formatarHorarioBrasilia } from "./filaDeEnvio.js";
 
 /** Garante que existe uma conversa para o telefone (dentro da empresa) e devolve a linha. */
 function conversaDoTelefone(empresaId, telefone, nome) {
@@ -29,8 +30,8 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
     const clique = buscarCliquePorCodigo(codigo);
     if (clique) {
       db.prepare(
-        "UPDATE conversas SET gclid = ?, fbclid = ?, origem = ?, ip = ?, atualizado_em = datetime('now') WHERE id = ?",
-      ).run(clique.gclid, clique.fbclid, clique.origem, clique.ip, conversa.id);
+        "UPDATE conversas SET gclid = ?, fbclid = ?, origem = ?, ip = ?, campanha = ?, atualizado_em = datetime('now') WHERE id = ?",
+      ).run(clique.gclid, clique.fbclid, clique.origem, clique.ip, clique.campanha, conversa.id);
     }
   }
 
@@ -73,27 +74,66 @@ export function listarMensagens(conversaId) {
   return db.prepare("SELECT * FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC").all(conversaId);
 }
 
-/** Marca a venda e, se houver gclid, envia a conversão pro Google Ads da empresa. */
+/**
+ * Marca a venda. Se houver gclid (e o IP não estiver bloqueado), a conversão
+ * NÃO é enviada na hora — entra na fila e é enviada automaticamente às 08h
+ * ou 20h (horário de Brasília), a não ser que o usuário mande antes ou
+ * cancele em "Vendas para Envio".
+ */
 export async function confirmarVenda(empresa, conversa, valor) {
-  let conversaoEnviada = false;
-  let respostaConversao = null;
+  let filaStatus = null;
+  let envioAgendadoPara = null;
+  let respostaConversao;
+
   if (conversa.ip && ipEstaBloqueado(empresa.id, conversa.ip)) {
     respostaConversao = `Venda marcada, mas a conversão NÃO foi enviada: o IP ${conversa.ip} está bloqueado.`;
   } else if (conversa.gclid) {
-    const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor, moeda: empresa.moeda });
-    conversaoEnviada = r.ok;
-    respostaConversao = r.ok ? "Conversão enviada ao Google Ads." : r.erro;
+    filaStatus = "pendente";
+    envioAgendadoPara = proximoHorarioEnvio().toISOString();
+    respostaConversao = `Venda marcada — a conversão entra na fila e é enviada automaticamente às ${formatarHorarioBrasilia(envioAgendadoPara)}. Você pode mandar antes ou cancelar em "Vendas para Envio".`;
   } else {
     respostaConversao = "Sem gclid nesta conversa — venda marcada, mas nada foi enviado ao Google Ads.";
   }
 
   db.prepare(
     `UPDATE conversas
-     SET status = 'vendido', valor = ?, valor_sugerido = NULL, conversao_enviada = ?, conversao_resposta = ?, atualizado_em = datetime('now')
+     SET status = 'vendido', valor = ?, valor_sugerido = NULL, conversao_enviada = 0, conversao_resposta = ?,
+         fila_status = ?, envio_agendado_para = ?, atualizado_em = datetime('now')
      WHERE id = ?`,
-  ).run(valor, conversaoEnviada ? 1 : 0, respostaConversao, conversa.id);
+  ).run(valor, respostaConversao, filaStatus, envioAgendadoPara, conversa.id);
 
-  return { conversaoEnviada, respostaConversao };
+  return { conversaoEnviada: false, respostaConversao };
+}
+
+/** Vendas dessa empresa esperando na fila de envio, formatadas pra tela "Vendas para Envio". */
+export function listarFila(empresaId) {
+  return listarFilaDeEnvio(empresaId).map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    telefone: c.telefone,
+    valor: c.valor,
+    campanha: c.campanha,
+    envioAgendadoPara: c.envio_agendado_para,
+  }));
+}
+
+/** Envia uma venda da fila na hora, sem esperar o horário agendado. */
+export async function enviarVendaAgora(empresa, conversa) {
+  if (conversa.fila_status !== "pendente") {
+    return { ok: false, erro: "Essa venda não está na fila de envio." };
+  }
+  const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor: conversa.valor, moeda: empresa.moeda });
+  marcarEnvioResultado(conversa.id, { enviada: r.ok, resposta: r.ok ? "Conversão enviada ao Google Ads." : r.erro });
+  return r.ok ? { ok: true } : { ok: false, erro: r.erro };
+}
+
+/** Cancela o envio de uma venda da fila — a conversão nunca é mandada pro Google Ads. */
+export function cancelarEnvio(conversa) {
+  if (conversa.fila_status !== "pendente") {
+    return { ok: false, erro: "Essa venda não está na fila de envio." };
+  }
+  cancelarEnvioNaFila(conversa.id);
+  return { ok: true };
 }
 
 /** Descarta uma "venda provável" detectada por engano, voltando a conversa pra lead. */

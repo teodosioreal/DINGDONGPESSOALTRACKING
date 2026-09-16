@@ -11,7 +11,7 @@ trackPublicRouter.post("/click", (req, res) => {
   if (!limitar(`click:${ipDe(req)}`, { max: 60, janelaMs: 60_000 })) {
     return res.status(429).json({ erro: "Muitas requisições." });
   }
-  const { empresa, codigo, gclid, fbclid, url } = req.body ?? {};
+  const { empresa, codigo, gclid, fbclid, url, campanha } = req.body ?? {};
   const empresaId = Number(empresa);
   if (!empresaId || !buscarEmpresa(empresaId)) return res.status(400).json({ erro: "empresa inválida" });
   if (!codigo || !CODIGO_VALIDO.test(codigo)) return res.status(400).json({ erro: "código inválido" });
@@ -22,6 +22,7 @@ trackPublicRouter.post("/click", (req, res) => {
     fbclid: fbclid ? String(fbclid).slice(0, 200) : null,
     urlOrigem: url ? String(url).slice(0, 500) : null,
     ip: ipDe(req),
+    campanha: campanha ? String(campanha).slice(0, 200) : null,
   });
   res.json({ ok: true });
 });

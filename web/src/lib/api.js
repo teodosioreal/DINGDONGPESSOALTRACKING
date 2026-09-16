@@ -27,6 +27,11 @@ export const api = {
     }),
 
   dashboard: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/resumo`),
+  filaEnvio: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/fila-envio`),
+  enviarVendaAgora: (empresaId, id) =>
+    chamar(`/api/empresas/${empresaId}/dashboard/fila-envio/${id}/enviar-agora`, { method: "POST" }),
+  cancelarEnvioVenda: (empresaId, id) =>
+    chamar(`/api/empresas/${empresaId}/dashboard/fila-envio/${id}/cancelar`, { method: "POST" }),
 
   // ---- Google Ads ----
   googleStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/google/status`),

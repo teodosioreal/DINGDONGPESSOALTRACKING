@@ -16,6 +16,7 @@
     var CHAVE_CODIGO = "dingdong_codigo";
     var CHAVE_GCLID = "dingdong_gclid";
     var CHAVE_FBCLID = "dingdong_fbclid";
+    var CHAVE_CAMPANHA = "dingdong_campanha";
 
     function gerarCodigo() {
       var alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -29,6 +30,13 @@
     var fbclid = params.get("fbclid") || localStorage.getItem(CHAVE_FBCLID) || "";
     if (params.get("gclid")) localStorage.setItem(CHAVE_GCLID, gclid);
     if (params.get("fbclid")) localStorage.setItem(CHAVE_FBCLID, fbclid);
+
+    // Nome/ID da campanha: só chega aqui se o anúncio tiver um parâmetro
+    // utm_campaign ou campaignid (ValueTrack) na URL final — se não tiver,
+    // fica em branco e a venda aparece como "campanha indefinida" no painel.
+    var campanhaUrl = params.get("utm_campaign") || params.get("campaignid") || "";
+    var campanha = campanhaUrl || localStorage.getItem(CHAVE_CAMPANHA) || "";
+    if (campanhaUrl) localStorage.setItem(CHAVE_CAMPANHA, campanhaUrl);
 
     var codigo = localStorage.getItem(CHAVE_CODIGO);
     if (!codigo) {
@@ -48,7 +56,14 @@
     fetch(origem + "/api/public/click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresa: empresaId, codigo: codigo, gclid: gclid, fbclid: fbclid, url: window.location.href }),
+      body: JSON.stringify({
+        empresa: empresaId,
+        codigo: codigo,
+        gclid: gclid,
+        fbclid: fbclid,
+        campanha: campanha,
+        url: window.location.href,
+      }),
       keepalive: true,
     }).catch(function () {});
 

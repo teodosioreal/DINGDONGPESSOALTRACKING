@@ -7,6 +7,9 @@ import {
   descartarVendaProvavel,
   registrarMensagemEnviada,
   resumoDashboard,
+  listarFila,
+  enviarVendaAgora,
+  cancelarEnvio,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 
@@ -56,4 +59,25 @@ conversasRouter.post("/:id/descartar-venda", (req, res) => {
 export const dashboardRouter = Router({ mergeParams: true });
 dashboardRouter.get("/resumo", (req, res) => {
   res.json(resumoDashboard(req.empresaId));
+});
+
+/** Vendas esperando o envio automático (08h/20h) — tela "Vendas para Envio". */
+dashboardRouter.get("/fila-envio", (req, res) => {
+  res.json({ fila: listarFila(req.empresaId) });
+});
+
+dashboardRouter.post("/fila-envio/:id/enviar-agora", async (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Venda não encontrada." });
+  const r = await enviarVendaAgora(req.empresa, conversa);
+  if (!r.ok) return res.status(400).json({ erro: r.erro });
+  res.json({ ok: true });
+});
+
+dashboardRouter.post("/fila-envio/:id/cancelar", (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Venda não encontrada." });
+  const r = cancelarEnvio(conversa);
+  if (!r.ok) return res.status(400).json({ erro: r.erro });
+  res.json({ ok: true });
 });

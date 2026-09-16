@@ -54,6 +54,7 @@ function criarSchema() {
     url_origem TEXT,
     ip TEXT,
     duracao_segundos INTEGER,
+    campanha TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_clicks_codigo ON clicks(codigo);
@@ -67,12 +68,15 @@ function criarSchema() {
     gclid TEXT,
     fbclid TEXT,
     ip TEXT,
+    campanha TEXT,
     origem TEXT NOT NULL DEFAULT 'sem_rastreio',
     status TEXT NOT NULL DEFAULT 'lead',
     valor_sugerido REAL,
     valor REAL,
     conversao_enviada INTEGER NOT NULL DEFAULT 0,
     conversao_resposta TEXT,
+    fila_status TEXT,
+    envio_agendado_para TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -179,8 +183,13 @@ function migrarColunasNovas() {
   if (!tabelaExiste("clicks") || !tabelaExiste("conversas")) return;
   adicionarColuna("clicks", "ip", "TEXT");
   adicionarColuna("clicks", "duracao_segundos", "INTEGER");
+  adicionarColuna("clicks", "campanha", "TEXT");
   adicionarColuna("conversas", "ip", "TEXT");
+  adicionarColuna("conversas", "campanha", "TEXT");
+  adicionarColuna("conversas", "fila_status", "TEXT");
+  adicionarColuna("conversas", "envio_agendado_para", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
 }
 
 // A migração precisa rodar ANTES do criarSchema() definitivo: se o banco
@@ -274,6 +283,37 @@ export function listarVisitasPorIp(empresaId) {
        LIMIT 200`,
     )
     .all(empresaId);
+}
+
+/* --------------------------------------------------------- fila de envio */
+
+/** Vendas dessa empresa esperando o envio automático (pra tela "Vendas para Envio"). */
+export function listarFilaDeEnvio(empresaId) {
+  return db
+    .prepare(
+      `SELECT * FROM conversas WHERE empresa_id = ? AND fila_status = 'pendente' ORDER BY envio_agendado_para ASC`,
+    )
+    .all(empresaId);
+}
+
+/** Vendas de QUALQUER empresa já no horário de serem enviadas — usado pelo agendador. */
+export function listarFilaDeEnvioDevida() {
+  return db
+    .prepare(`SELECT * FROM conversas WHERE fila_status = 'pendente' AND envio_agendado_para <= datetime('now')`)
+    .all();
+}
+
+/** Registra o resultado de uma tentativa de envio. Falha mantém "pendente" pra tentar de novo depois. */
+export function marcarEnvioResultado(conversaId, { enviada, resposta }) {
+  db.prepare(
+    `UPDATE conversas SET fila_status = ?, conversao_enviada = ?, conversao_resposta = ?, atualizado_em = datetime('now') WHERE id = ?`,
+  ).run(enviada ? "enviado" : "pendente", enviada ? 1 : 0, resposta, conversaId);
+}
+
+export function cancelarEnvioNaFila(conversaId) {
+  db.prepare(
+    `UPDATE conversas SET fila_status = 'cancelado', conversao_resposta = 'Envio cancelado manualmente.', atualizado_em = datetime('now') WHERE id = ?`,
+  ).run(conversaId);
 }
 
 /* -------------------------------------------------------- config global */

@@ -6,12 +6,12 @@ export function gerarCodigo() {
   return randomBytes(4).toString("hex").toUpperCase(); // ex: A1B2C3D4
 }
 
-export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, ip }) {
+export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, ip, campanha }) {
   const origem = gclid ? "google" : fbclid ? "meta" : "sem_rastreio";
   db.prepare(
-    `INSERT INTO clicks (empresa_id, codigo, gclid, fbclid, origem, url_origem, ip)
-     VALUES (@empresaId, @codigo, @gclid, @fbclid, @origem, @urlOrigem, @ip)
-     ON CONFLICT(codigo) DO UPDATE SET gclid = excluded.gclid, fbclid = excluded.fbclid, origem = excluded.origem, ip = excluded.ip`,
+    `INSERT INTO clicks (empresa_id, codigo, gclid, fbclid, origem, url_origem, ip, campanha)
+     VALUES (@empresaId, @codigo, @gclid, @fbclid, @origem, @urlOrigem, @ip, @campanha)
+     ON CONFLICT(codigo) DO UPDATE SET gclid = excluded.gclid, fbclid = excluded.fbclid, origem = excluded.origem, ip = excluded.ip, campanha = excluded.campanha`,
   ).run({
     empresaId,
     codigo,
@@ -20,6 +20,7 @@ export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, i
     origem,
     urlOrigem: urlOrigem ?? null,
     ip: ip ?? null,
+    campanha: campanha ?? null,
   });
 }
 
