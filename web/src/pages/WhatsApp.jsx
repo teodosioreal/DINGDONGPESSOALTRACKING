@@ -15,9 +15,37 @@ export default function WhatsApp() {
   useEffect(() => {
     carregarCredenciais();
     carregarStatus();
-    const t = setInterval(carregarStatus, 4000);
+    const t = setInterval(carregarStatus, 8000);
     return () => clearInterval(t);
   }, []);
+
+  // Enquanto não conectar, busca/atualiza o QR Code a cada 5s (ele expira rápido).
+  useEffect(() => {
+    if (!credenciais?.temApiKey || status?.conectado) return;
+    let cancelado = false;
+
+    async function atualizarQr() {
+      try {
+        const r = await api.whatsappQr();
+        if (cancelado) return;
+        if (r.conectado) {
+          setQr(null);
+          setStatus((s) => ({ ...s, conectado: true }));
+        } else {
+          setQr(r.imagemBase64 ?? null);
+        }
+      } catch (e) {
+        if (!cancelado) setErro(e.message);
+      }
+    }
+
+    atualizarQr();
+    const t = setInterval(atualizarQr, 5000);
+    return () => {
+      cancelado = true;
+      clearInterval(t);
+    };
+  }, [credenciais?.temApiKey, status?.conectado]);
 
   async function carregarCredenciais() {
     const r = await api.whatsappCredenciais();
@@ -56,17 +84,6 @@ export default function WhatsApp() {
     setCodigo(null);
     await carregarCredenciais();
     await carregarStatus();
-  }
-
-  async function gerarQr() {
-    setErro("");
-    try {
-      const r = await api.whatsappQr();
-      setQr(r.imagemBase64);
-      setCodigo(null);
-    } catch (e) {
-      setErro(e.message);
-    }
   }
 
   async function gerarCodigo() {
@@ -137,17 +154,15 @@ export default function WhatsApp() {
 
       {configurado && !status?.conectado && (
         <div className="rounded-lg border border-slate-200 bg-white p-6">
-          <div className="flex gap-4">
-            <button onClick={gerarQr} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              Gerar QR Code
-            </button>
-          </div>
-
-          {qr && (
-            <div className="mt-4">
+          {qr ? (
+            <div>
               <img src={qr} alt="QR Code do WhatsApp" className="h-56 w-56 rounded-md border border-slate-200" />
-              <p className="mt-2 text-sm text-slate-500">Abra o WhatsApp no celular → Aparelhos conectados → Conectar um aparelho.</p>
+              <p className="mt-2 text-sm text-slate-500">
+                Abra o WhatsApp no celular → Aparelhos conectados → Conectar um aparelho. O código se atualiza sozinho.
+              </p>
             </div>
+          ) : (
+            <p className="text-sm text-slate-500">Buscando QR Code…</p>
           )}
 
           <div className="mt-6 border-t border-slate-100 pt-6">

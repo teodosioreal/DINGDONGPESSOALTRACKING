@@ -6,12 +6,11 @@
  * na tabela `config` do SQLite — por isso as funções abaixo recebem/leem
  * do banco, não de variável de ambiente.
  *
- * IMPORTANTE: os caminhos exatos abaixo (/qrcode, /pairing-code, /send-text…)
- * seguem o padrão que a D-API usa para a API administrativa de criação de
- * sessão (`/api/v1/sessions`), mas eu não tenho a documentação completa dos
- * endpoints de uso da sessão (status, enviar mensagem, etc.) — confirme cada
- * um no painel/documentação da D-API antes de confiar 100% neles. Se algo
- * devolver 404, é sinal de que o caminho mudou e é só ajustar aqui.
+ * Endpoints confirmados na documentação oficial (docs.d-api.cloud):
+ *  - GET  /api/v1/sessions/{id}/qr       → status da sessão + QR Code atual
+ *  - GET  /api/v1/sessions/{id}/connect  → força reconexão (chamar quando o QR expirou)
+ * Os demais (/pairing-code, /disconnect, /send-text) ainda são um chute
+ * baseado no padrão da API — confirme na documentação se algo der 404.
  */
 import { getConfig, setConfig, apagarConfig } from "./db.js";
 
@@ -57,24 +56,43 @@ async function chamar(caminho, init) {
   return { ok: res.ok, status: res.status, dados };
 }
 
+/** Consulta bruta ao endpoint /qr — é ele quem informa o status da sessão também. */
+async function consultarQr() {
+  const r = await chamar("/qr");
+  return r;
+}
+
 export async function statusConexao() {
   const erro = faltaConfigurar();
   if (erro) return { configurado: false, conectado: false, erro };
-  const r = await chamar("/status");
+  const r = await consultarQr();
   if (!r.ok) return { configurado: true, conectado: false, erro: "Não foi possível consultar o status da sessão." };
-  return {
-    configurado: true,
-    conectado: Boolean(r.dados?.connected ?? r.dados?.status === "connected"),
-    numero: r.dados?.phone,
-  };
+  return { configurado: true, conectado: r.dados?.status === "connected" };
 }
 
+/**
+ * Devolve o QR Code atual pra escanear. Se o código já tiver expirado,
+ * chama /connect pra gerar um novo antes de devolver (conforme a
+ * documentação da D-API).
+ */
 export async function gerarQrCode() {
   const erro = faltaConfigurar();
   if (erro) return { erro };
-  const r = await chamar("/qrcode");
-  if (!r.ok) return { erro: "Não foi possível gerar o QR Code agora." };
-  return { imagemBase64: r.dados?.qrcode ?? r.dados?.value ?? r.dados?.image };
+
+  let r = await consultarQr();
+  if (!r.ok) return { erro: "Não foi possível consultar o QR Code agora." };
+
+  if (r.dados?.status === "connected") return { conectado: true };
+
+  if (r.dados?.expired) {
+    const reconectar = await chamar("/connect");
+    if (!reconectar.ok) return { erro: "Não foi possível reconectar a sessão agora." };
+    r = await consultarQr();
+    if (!r.ok) return { erro: "Não foi possível gerar um novo QR Code agora." };
+  }
+
+  if (r.dados?.status === "connected") return { conectado: true };
+  return { imagemBase64: r.dados?.qrCodeImage, conectado: false };
 }
 
 export async function gerarCodigoPareamento(telefone) {
