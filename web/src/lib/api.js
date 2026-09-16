@@ -29,6 +29,10 @@ export const api = {
   whatsappQr: () => chamar("/api/whatsapp/conectar/qr", { method: "POST" }),
   whatsappCodigo: (telefone) => chamar("/api/whatsapp/conectar/codigo", { method: "POST", body: { telefone } }),
   whatsappDesconectar: () => chamar("/api/whatsapp/desconectar", { method: "POST" }),
+  whatsappCredenciais: () => chamar("/api/whatsapp/credenciais"),
+  whatsappSalvarCredenciais: (sessionId, apiKey) =>
+    chamar("/api/whatsapp/credenciais", { method: "POST", body: { sessionId, apiKey } }),
+  whatsappRemoverCredenciais: () => chamar("/api/whatsapp/credenciais/remover", { method: "POST" }),
 
   conversas: () => chamar("/api/conversas"),
   conversa: (id) => chamar(`/api/conversas/${id}/mensagens`),

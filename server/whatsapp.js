@@ -1,34 +1,57 @@
 /**
- * Cliente da Z-API (ou compatível) para a instância própria de WhatsApp.
+ * Cliente da D-API para a instância própria de WhatsApp.
  *
- * Obs.: os nomes exatos de campo/rota da Z-API podem mudar com o tempo —
- * confira a documentação atual deles se algo aqui parar de bater
- * (https://developer.z-api.io). O objetivo deste arquivo é concentrar
- * TODA a integração num único lugar fácil de ajustar.
+ * Diferente do Google Ads (que fica no .env), as credenciais da D-API são
+ * configuradas dentro do próprio painel (tela WhatsApp) e ficam guardadas
+ * na tabela `config` do SQLite — por isso as funções abaixo recebem/leem
+ * do banco, não de variável de ambiente.
+ *
+ * IMPORTANTE: os caminhos exatos abaixo (/qrcode, /pairing-code, /send-text…)
+ * seguem o padrão que a D-API usa para a API administrativa de criação de
+ * sessão (`/api/v1/sessions`), mas eu não tenho a documentação completa dos
+ * endpoints de uso da sessão (status, enviar mensagem, etc.) — confirme cada
+ * um no painel/documentação da D-API antes de confiar 100% neles. Se algo
+ * devolver 404, é sinal de que o caminho mudou e é só ajustar aqui.
  */
+import { getConfig, setConfig, apagarConfig } from "./db.js";
 
-function credenciais() {
-  const base = (process.env.ZAPI_BASE_URL ?? "https://api.z-api.io").replace(/\/$/, "");
-  const instanceId = process.env.ZAPI_INSTANCE_ID ?? "";
-  const token = process.env.ZAPI_INSTANCE_TOKEN ?? "";
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN ?? "";
-  return { base, instanceId, token, clientToken };
+const BASE = (process.env.DAPI_BASE_URL ?? "https://api.d-api.cloud").replace(/\/$/, "");
+
+export function credenciaisSalvas() {
+  return {
+    sessionId: getConfig("dapi_session_id"),
+    apiKey: getConfig("dapi_api_key"),
+  };
+}
+
+export function credenciaisConfiguradas() {
+  const { sessionId, apiKey } = credenciaisSalvas();
+  return Boolean(sessionId && apiKey);
+}
+
+export function salvarCredenciais({ sessionId, apiKey }) {
+  setConfig("dapi_session_id", String(sessionId ?? "").trim());
+  setConfig("dapi_api_key", String(apiKey ?? "").trim());
+}
+
+export function limparCredenciais() {
+  apagarConfig("dapi_session_id");
+  apagarConfig("dapi_api_key");
 }
 
 function faltaConfigurar() {
-  const { instanceId, token, clientToken } = credenciais();
-  if (!instanceId || !token || !clientToken) {
-    return "Configure ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN e ZAPI_CLIENT_TOKEN no .env.";
+  if (!credenciaisConfiguradas()) {
+    return "Preencha o Session ID e a API Key da D-API na tela do WhatsApp.";
   }
   return null;
 }
 
 async function chamar(caminho, init) {
-  const { base, instanceId, token, clientToken } = credenciais();
-  const url = `${base}/instances/${instanceId}/token/${token}${caminho}`;
+  const { sessionId, apiKey } = credenciaisSalvas();
+  const url = `${BASE}/api/v1/sessions/${sessionId}${caminho}`;
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", "Client-Token": clientToken, ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", Authorization: apiKey, ...(init?.headers ?? {}) },
   });
   const dados = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, dados };
@@ -36,19 +59,22 @@ async function chamar(caminho, init) {
 
 export async function statusConexao() {
   const erro = faltaConfigurar();
-  if (erro) return { conectado: false, erro };
+  if (erro) return { configurado: false, conectado: false, erro };
   const r = await chamar("/status");
-  if (!r.ok) return { conectado: false, erro: "Não foi possível consultar o status da instância." };
-  return { conectado: Boolean(r.dados?.connected), numero: r.dados?.smartphoneConnected ? r.dados?.phone : undefined };
+  if (!r.ok) return { configurado: true, conectado: false, erro: "Não foi possível consultar o status da sessão." };
+  return {
+    configurado: true,
+    conectado: Boolean(r.dados?.connected ?? r.dados?.status === "connected"),
+    numero: r.dados?.phone,
+  };
 }
 
 export async function gerarQrCode() {
   const erro = faltaConfigurar();
   if (erro) return { erro };
-  const r = await chamar("/qr-code/image");
+  const r = await chamar("/qrcode");
   if (!r.ok) return { erro: "Não foi possível gerar o QR Code agora." };
-  // A Z-API devolve a imagem já em base64 no campo `value`.
-  return { imagemBase64: r.dados?.value };
+  return { imagemBase64: r.dados?.qrcode ?? r.dados?.value ?? r.dados?.image };
 }
 
 export async function gerarCodigoPareamento(telefone) {
@@ -56,7 +82,7 @@ export async function gerarCodigoPareamento(telefone) {
   if (erro) return { erro };
   const numero = (telefone ?? "").replace(/\D/g, "");
   if (!numero) return { erro: "Informe o telefone com DDI (ex: 5511999999999)." };
-  const r = await chamar(`/phone-code/${numero}`);
+  const r = await chamar("/pairing-code", { method: "POST", body: JSON.stringify({ phone: numero }) });
   if (!r.ok) return { erro: "Não foi possível gerar o código de pareamento agora." };
   return { codigo: r.dados?.code };
 }
@@ -88,7 +114,7 @@ export function webhookAutorizado(req) {
   return dif === 0;
 }
 
-/** Normaliza os formatos de payload mais comuns de webhook (Z-API/D-API). */
+/** Normaliza os formatos de payload mais comuns de webhook da D-API. */
 export function normalizarPayloadInbound(bruto) {
   const cru = bruto ?? {};
   const dado = typeof cru.data === "object" && cru.data ? cru.data : cru;

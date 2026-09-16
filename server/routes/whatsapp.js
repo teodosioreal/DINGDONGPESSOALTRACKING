@@ -1,11 +1,39 @@
 import { Router } from "express";
-import { statusConexao, gerarQrCode, gerarCodigoPareamento, desconectar, webhookAutorizado, normalizarPayloadInbound } from "../whatsapp.js";
+import {
+  statusConexao,
+  gerarQrCode,
+  gerarCodigoPareamento,
+  desconectar,
+  webhookAutorizado,
+  normalizarPayloadInbound,
+  credenciaisSalvas,
+  salvarCredenciais,
+  limparCredenciais,
+} from "../whatsapp.js";
 import { registrarMensagemRecebida } from "../conversas.js";
 
 export const whatsappRouter = Router();
 
 whatsappRouter.get("/status", async (_req, res) => {
   res.json(await statusConexao());
+});
+
+/** Session ID e API Key da D-API, preenchidos na própria tela do painel. */
+whatsappRouter.get("/credenciais", (_req, res) => {
+  const { sessionId, apiKey } = credenciaisSalvas();
+  res.json({ sessionId: sessionId ?? "", temApiKey: Boolean(apiKey) });
+});
+
+whatsappRouter.post("/credenciais", (req, res) => {
+  const { sessionId, apiKey } = req.body ?? {};
+  if (!sessionId || !apiKey) return res.status(400).json({ erro: "Preencha o Session ID e a API Key." });
+  salvarCredenciais({ sessionId, apiKey });
+  res.json({ ok: true });
+});
+
+whatsappRouter.post("/credenciais/remover", (_req, res) => {
+  limparCredenciais();
+  res.json({ ok: true });
 });
 
 whatsappRouter.post("/conectar/qr", async (_req, res) => {
