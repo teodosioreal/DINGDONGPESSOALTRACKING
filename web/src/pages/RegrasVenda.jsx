@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
@@ -9,6 +9,7 @@ export default function RegrasVenda() {
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     api
@@ -19,6 +20,14 @@ export default function RegrasVenda() {
       })
       .catch((e) => setErro(e.message));
   }, [empresaId]);
+
+  // Encolhe/cresce o campo de frases conforme o conteúdo, em vez de deixar uma caixa grande e vazia.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [palavrasChave]);
 
   async function salvar(e) {
     e.preventDefault();
@@ -47,8 +56,8 @@ export default function RegrasVenda() {
         automaticamente — senão, fica esperando você confirmar em <strong>Conversas</strong>.
       </p>
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        Quando o sistema detecta a frase, toca um sininho 🔔 — e quando a venda é enviada pro Google Ads, toca um
-        som de venda 💰. As notificações aparecem no canto superior direito, em qualquer tela.
+        Quando o sistema detecta a frase — e de novo quando a venda é enviada pro Google Ads — toca um som de caixa
+        registradora 💰 bem chamativo, e o sininho no canto superior direito acende com a notificação.
       </p>
 
       {erro && (
@@ -71,13 +80,14 @@ export default function RegrasVenda() {
             Frases que a empresa manda pra confirmar a venda
           </label>
           <textarea
+            ref={textareaRef}
             value={palavrasChave}
             onChange={(e) => setPalavrasChave(e.target.value)}
-            rows={6}
             placeholder={
               "Uma por linha (ou separadas por vírgula), por exemplo:\npagamento confirmado, obrigado\nrecebemos seu pix\nvenda registrada com sucesso"
             }
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="w-full resize-none overflow-hidden rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            style={{ minHeight: "4.5rem" }}
           />
         </div>
 

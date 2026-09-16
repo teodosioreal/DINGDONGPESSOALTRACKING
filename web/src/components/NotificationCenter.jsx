@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
-import { tocarSinoDingDong, tocarSomDeVenda } from "../lib/sons.js";
+import { tocarSomDeCaixaRegistradora } from "../lib/sons.js";
 
 const ICONE = { venda_provavel: "🔔", venda_enviada: "💰" };
 const FORMATADOR_VALOR = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -26,6 +26,7 @@ export default function NotificationCenter({ empresaId }) {
   const [notificacoes, setNotificacoes] = useState([]);
   const [naoLidas, setNaoLidas] = useState(0);
   const [aberto, setAberto] = useState(false);
+  const [chamativo, setChamativo] = useState(false);
   const desdeRef = useRef(null);
   const idRef = useRef(0);
   const containerRef = useRef(null);
@@ -47,10 +48,9 @@ export default function NotificationCenter({ empresaId }) {
           const novas = r.eventos.map((e) => ({ id: ++idRef.current, ...e })).reverse();
           setNotificacoes((atual) => [...novas, ...atual].slice(0, 30));
           setNaoLidas((atual) => atual + r.eventos.length);
-          for (const evento of r.eventos) {
-            if (evento.tipo === "venda_provavel") tocarSinoDingDong();
-            if (evento.tipo === "venda_enviada") tocarSomDeVenda();
-          }
+          r.eventos.forEach(tocarSomDeCaixaRegistradora);
+          setChamativo(true);
+          setTimeout(() => setChamativo(false), 1600);
         }
         desdeRef.current = r.agora;
       } catch {
@@ -90,11 +90,15 @@ export default function NotificationCenter({ empresaId }) {
       <button
         onClick={alternar}
         title="Notificações"
-        className="relative flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+        className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${
+          chamativo
+            ? "animate-bounce border-amber-400 bg-amber-100 dark:border-amber-500 dark:bg-amber-900/60"
+            : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+        }`}
       >
         🔔
         {naoLidas > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
             {naoLidas > 9 ? "9+" : naoLidas}
           </span>
         )}

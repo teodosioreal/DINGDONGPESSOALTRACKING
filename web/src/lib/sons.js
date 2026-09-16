@@ -27,26 +27,22 @@ function tocarNota(ctx, { freq, inicio, duracao, tipo = "sine", volume = 0.25 })
   osc.stop(t0 + duracao + 0.05);
 }
 
-/** Sininho "ding-dong" — toca quando o sistema detecta a palavra-chave de venda. */
-export function tocarSinoDingDong() {
+/**
+ * Som de "caixa registradora" — bem chamativo, usado tanto pra venda provável
+ * detectada quanto pra venda enviada ao Google Ads. Dois cliques metálicos
+ * (a gaveta abrindo) seguidos de um "ching!" brilhante e alto.
+ */
+export function tocarSomDeCaixaRegistradora() {
   const ctx = contexto();
   if (!ctx) return;
   try {
-    tocarNota(ctx, { freq: 880, inicio: 0, duracao: 0.45, tipo: "sine", volume: 0.22 });
-    tocarNota(ctx, { freq: 659.25, inicio: 0.32, duracao: 0.65, tipo: "sine", volume: 0.22 });
+    tocarNota(ctx, { freq: 1600, inicio: 0, duracao: 0.06, tipo: "square", volume: 0.22 });
+    tocarNota(ctx, { freq: 2000, inicio: 0.07, duracao: 0.06, tipo: "square", volume: 0.22 });
+    tocarNota(ctx, { freq: 1046.5, inicio: 0.16, duracao: 0.7, tipo: "sine", volume: 0.35 });
+    tocarNota(ctx, { freq: 1318.5, inicio: 0.16, duracao: 0.7, tipo: "sine", volume: 0.3 });
+    tocarNota(ctx, { freq: 1567.98, inicio: 0.16, duracao: 0.8, tipo: "sine", volume: 0.25 });
+    tocarNota(ctx, { freq: 2093, inicio: 0.18, duracao: 0.6, tipo: "triangle", volume: 0.15 });
   } catch {
     /* Web Audio indisponível (ex: aba em background em alguns navegadores) — segue sem som */
-  }
-}
-
-/** Som de "venda" — toca quando a conversão é enviada pro Google Ads. */
-export function tocarSomDeVenda() {
-  const ctx = contexto();
-  if (!ctx) return;
-  try {
-    const notas = [523.25, 659.25, 783.99, 1046.5];
-    notas.forEach((freq, i) => tocarNota(ctx, { freq, inicio: i * 0.09, duracao: 0.22, tipo: "triangle", volume: 0.25 }));
-  } catch {
-    /* Web Audio indisponível — segue sem som */
   }
 }
