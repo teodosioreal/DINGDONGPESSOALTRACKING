@@ -2,6 +2,17 @@
 
 Guia passo a passo pra colocar o DingDong pessoal no ar. Precisa ser uma **VPS** (Ubuntu, acesso root) — hospedagem compartilhada não roda um processo Node.js persistente.
 
+## Caminho rápido (recomendado): script + deploy automático
+
+1. No terminal da Hostinger (root), rode uma vez: `bash <(curl -fsSL https://raw.githubusercontent.com/teodosioreal/DINGDONGPESSOALTRACKING/main/scripts/bootstrap-vps.sh) SEUDOMINIO.COM.BR`
+2. Edite `/var/www/dingdong/.env` com os valores reais e rode `npm --prefix /var/www/dingdong run build && systemctl start dingdong`.
+3. Rode o Certbot (o script mostra o comando exato no final).
+4. No GitHub, em Settings → Secrets and variables → Actions, cadastre `VPS_HOST` (IP), `VPS_USER` (`root`) e `VPS_SSH_KEY` (a chave privada correspondente à pública que você autorizou em `~/.ssh/authorized_keys`).
+
+Depois disso, todo `git push` na branch `main` atualiza a VPS sozinho (veja `.github/workflows/deploy.yml`) — nenhum acesso manual é necessário para futuras mudanças.
+
+Os passos manuais abaixo (1 a 6) explicam o que o script faz, caso queira revisar ou ajustar algo por conta própria.
+
 ## 0. Antes de começar
 
 Você vai precisar, fora do servidor:
