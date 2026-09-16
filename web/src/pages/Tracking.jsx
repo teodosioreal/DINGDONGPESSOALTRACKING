@@ -16,24 +16,25 @@ export default function Tracking() {
   return (
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Instalar rastreio</h1>
-      <p className="text-sm text-slate-600">
-        Cole este script no <code className="rounded bg-slate-100 px-1">&lt;head&gt;</code> do seu site, antes de{" "}
-        <code className="rounded bg-slate-100 px-1">&lt;/head&gt;</code>. Ele captura o gclid do clique de anúncio e
-        marca automaticamente os links de WhatsApp da página.
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Cole este script no{" "}
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">&lt;head&gt;</code> do seu site, antes de{" "}
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">&lt;/head&gt;</code>. Ele captura o gclid do
+        clique de anúncio e marca automaticamente os links de WhatsApp da página.
       </p>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-900 p-4">
+      <div className="rounded-lg border border-slate-200 bg-slate-900 p-4 dark:border-slate-800">
         <code className="break-all text-sm text-slate-100">{script}</code>
       </div>
 
       <button
         onClick={copiar}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
       >
         {copiado ? "Copiado!" : "Copiar código"}
       </button>
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
         Importante: seus links de WhatsApp precisam apontar para <code>wa.me</code> ou{" "}
         <code>whatsapp.com</code> para o script conseguir marcá-los.
       </div>

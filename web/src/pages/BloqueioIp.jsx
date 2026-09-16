@@ -65,7 +65,7 @@ export default function BloqueioIp() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Bloqueio de IP</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Todo visitante que passa pelo script de rastreio aparece aqui com o IP, se veio de um anúncio e quanto
           tempo ficou no site. Bloquear um IP não mexe na sua campanha do Google Ads — é só interno: a partir daí,
           se esse IP fechar uma "venda" numa conversa, a conversão não é mais enviada. Você decide o critério (ex:
@@ -73,18 +73,22 @@ export default function BloqueioIp() {
         </p>
       </div>
 
-      {erro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
+      {erro && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          {erro}
+        </p>
+      )}
 
       {carregando ? (
-        <p className="text-sm text-slate-500">Carregando…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando…</p>
       ) : visitas.length === 0 ? (
-        <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">
+        <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
           Ainda não há visitas registradas com IP. Confira se o script (t.js) está instalado no seu site.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
               <tr>
                 <th className="px-4 py-3">IP</th>
                 <th className="px-4 py-3">Origem</th>
@@ -95,31 +99,31 @@ export default function BloqueioIp() {
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {visitas.map((v) => (
-                <tr key={v.ip} className={v.bloqueado ? "bg-red-50/40" : ""}>
+                <tr key={v.ip} className={v.bloqueado ? "bg-red-50/40 dark:bg-red-950/20" : ""}>
                   <td className="px-4 py-3 font-mono text-xs">{v.ip}</td>
                   <td className="px-4 py-3">
                     {v.veioDeAnuncio ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/40 dark:text-green-400">
                         Veio de anúncio
                       </span>
                     ) : (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                         Direto/outro
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3">{v.visitas}</td>
                   <td className="px-4 py-3">{formatarDuracao(v.duracao_segundos)}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatarData(v.ultima_visita)}</td>
+                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{formatarData(v.ultima_visita)}</td>
                   <td className="px-4 py-3">
                     {v.bloqueado ? (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
                         Bloqueado
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-400">Liberado</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">Liberado</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -128,7 +132,7 @@ export default function BloqueioIp() {
                       disabled={processando === v.ip}
                       className={`rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
                         v.bloqueado
-                          ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          ? "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                           : "bg-red-600 text-white hover:bg-red-700"
                       }`}
                     >

@@ -55,21 +55,27 @@ export default function Empresas() {
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Empresas</h1>
-      <p className="text-sm text-slate-500">Cada empresa tem sua própria conexão do Google Ads e do WhatsApp.</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Cada empresa tem sua própria conexão do Google Ads e do WhatsApp.
+      </p>
 
-      {erro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
+      {erro && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          {erro}
+        </p>
+      )}
 
       <form onSubmit={criar} className="flex gap-2">
         <input
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           placeholder="Nome da empresa/cliente"
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         />
         <button
           type="submit"
           disabled={criando}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
         >
           + Nova empresa
         </button>
@@ -79,12 +85,12 @@ export default function Empresas() {
         {(empresas ?? []).map((emp) => (
           <div
             key={emp.id}
-            className="relative rounded-lg border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm"
+            className="relative rounded-lg border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
           >
             <button
               onClick={() => excluir(emp)}
               title="Excluir empresa"
-              className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+              className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
             >
               Excluir
             </button>
@@ -93,14 +99,18 @@ export default function Empresas() {
               <div className="mt-3 flex gap-2 text-xs">
                 <span
                   className={`rounded-full px-2 py-1 font-medium ${
-                    emp.googleConectado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                    emp.googleConectado
+                      ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                   }`}
                 >
                   Google Ads {emp.googleConectado ? "conectado" : "pendente"}
                 </span>
                 <span
                   className={`rounded-full px-2 py-1 font-medium ${
-                    emp.whatsappConfigurado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                    emp.whatsappConfigurado
+                      ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                   }`}
                 >
                   WhatsApp {emp.whatsappConfigurado ? "configurado" : "pendente"}
@@ -112,7 +122,9 @@ export default function Empresas() {
       </div>
 
       {empresas && empresas.length === 0 && (
-        <p className="text-sm text-slate-500">Nenhuma empresa cadastrada ainda — crie a primeira acima.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Nenhuma empresa cadastrada ainda — crie a primeira acima.
+        </p>
       )}
     </div>
   );

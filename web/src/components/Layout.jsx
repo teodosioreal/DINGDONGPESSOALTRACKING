@@ -13,10 +13,30 @@ function formatarBuild() {
   }
 }
 
+function temaSalvo() {
+  try {
+    const tema = localStorage.getItem("dingdong_tema");
+    if (tema) return tema === "escuro";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    return false;
+  }
+}
+
 export default function Layout({ aoSair }) {
   const navigate = useNavigate();
   const { empresaId } = useParams();
   const [empresa, setEmpresa] = useState(null);
+  const [escuro, setEscuro] = useState(temaSalvo);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", escuro);
+    try {
+      localStorage.setItem("dingdong_tema", escuro ? "escuro" : "claro");
+    } catch {
+      /* localStorage indisponível (modo privado etc.) — segue sem persistir */
+    }
+  }, [escuro]);
 
   useEffect(() => {
     if (!empresaId) {
@@ -49,7 +69,14 @@ export default function Layout({ aoSair }) {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <button
+        onClick={() => setEscuro((v) => !v)}
+        title={escuro ? "Mudar para o modo claro" : "Mudar para o modo escuro"}
+        className="fixed right-4 top-4 z-50 flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      >
+        {escuro ? "☀️ Claro" : "🌙 Escuro"}
+      </button>
+      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="px-5 py-6">
           <span className="text-lg font-semibold tracking-tight">DingDong</span>
         </div>
@@ -59,7 +86,9 @@ export default function Layout({ aoSair }) {
             end
             className={({ isActive }) =>
               `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                isActive
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
               }`
             }
           >
@@ -68,7 +97,7 @@ export default function Layout({ aoSair }) {
 
           {empresa && (
             <>
-              <p className="mt-5 mb-1 truncate px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mt-5 mb-1 truncate px-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 {empresa.nome}
               </p>
               {itensEmpresa.map((item) => (
@@ -78,7 +107,9 @@ export default function Layout({ aoSair }) {
                   end={item.fim}
                   className={({ isActive }) =>
                     `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                      isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                      isActive
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     }`
                   }
                 >
@@ -91,11 +122,11 @@ export default function Layout({ aoSair }) {
         <div className="space-y-2 p-3">
           <button
             onClick={sair}
-            className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-100"
+            className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             Sair
           </button>
-          <p className="px-3 text-xs text-slate-400">Última atualização: {formatarBuild()}</p>
+          <p className="px-3 text-xs text-slate-400 dark:text-slate-500">Última atualização: {formatarBuild()}</p>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto p-8">

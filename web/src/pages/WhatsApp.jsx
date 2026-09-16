@@ -113,12 +113,20 @@ export default function WhatsApp() {
     <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">WhatsApp</h1>
 
-      {erro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
-      {aviso && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{aviso}</p>}
+      {erro && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          {erro}
+        </p>
+      )}
+      {aviso && (
+        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-400">
+          {aviso}
+        </p>
+      )}
 
       {!configurado && (
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <p className="mb-3 text-sm text-slate-600">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
             Cria a sessão na D-API automaticamente, já com o nome desta empresa e o webhook configurado — sem
             precisar entrar no painel da D-API.
           </p>
@@ -126,13 +134,13 @@ export default function WhatsApp() {
             <button
               onClick={criarSessaoAutomaticamente}
               disabled={criandoSessao}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
             >
               {criandoSessao ? "Criando…" : "Criar sessão automaticamente"}
             </button>
             <button
               onClick={() => navigate(`/app/empresas/${empresaId}`)}
-              className="text-sm font-medium text-slate-500 hover:underline"
+              className="text-sm font-medium text-slate-500 hover:underline dark:text-slate-400"
             >
               Configurar depois
             </button>
@@ -140,40 +148,50 @@ export default function WhatsApp() {
         </div>
       )}
 
-      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <span className={`size-2.5 rounded-full ${status?.conectado ? "bg-green-500" : "bg-red-500"}`} />
         <span className="text-sm font-medium">{status?.conectado ? "Conectado" : "Desconectado"}</span>
-        {status?.numero && <span className="text-sm text-slate-500">— {status.numero}</span>}
+        {status?.numero && <span className="text-sm text-slate-500 dark:text-slate-400">— {status.numero}</span>}
         {configurado && !status?.conectado && (
-          <button onClick={removerCredenciais} className="ml-auto text-xs font-medium text-red-600 hover:underline">
+          <button
+            onClick={removerCredenciais}
+            className="ml-auto text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+          >
             Remover sessão
           </button>
         )}
       </div>
 
       {configurado && !status?.conectado && (
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
           {qr ? (
             <div>
-              <img src={qr} alt="QR Code do WhatsApp" className="h-56 w-56 rounded-md border border-slate-200" />
-              <p className="mt-2 text-sm text-slate-500">
+              <img
+                src={qr}
+                alt="QR Code do WhatsApp"
+                className="h-56 w-56 rounded-md border border-slate-200 dark:border-slate-700"
+              />
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                 Abra o WhatsApp no celular → Aparelhos conectados → Conectar um aparelho. O código se atualiza sozinho.
               </p>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">Buscando QR Code…</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Buscando QR Code…</p>
           )}
 
-          <div className="mt-6 border-t border-slate-100 pt-6">
+          <div className="mt-6 border-t border-slate-100 pt-6 dark:border-slate-800">
             <p className="mb-2 text-sm font-medium">Ou conectar por código de 8 dígitos</p>
             <div className="flex gap-2">
               <input
                 value={telefone}
                 onChange={(e) => setTelefone(e.target.value)}
                 placeholder="5511999999999"
-                className="w-56 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                className="w-56 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
-              <button onClick={gerarCodigo} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium">
+              <button
+                onClick={gerarCodigo}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-700 dark:hover:bg-slate-800"
+              >
                 Gerar código
               </button>
             </div>
@@ -183,7 +201,10 @@ export default function WhatsApp() {
       )}
 
       {status?.conectado && (
-        <button onClick={desconectar} className="text-sm font-medium text-red-600 hover:underline">
+        <button
+          onClick={desconectar}
+          className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+        >
           Desconectar
         </button>
       )}

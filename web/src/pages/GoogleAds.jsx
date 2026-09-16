@@ -109,31 +109,40 @@ export default function GoogleAds() {
     <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Google Ads</h1>
 
-      {erro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
+      {erro && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          {erro}
+        </p>
+      )}
 
       {status?.conectado ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500">Conectado como</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Conectado como</p>
               <p className="font-medium">{status.email || "conta do Google"}</p>
               {status.customerNome && (
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Conta ativa: {status.customerNome} ({status.customerId})
                 </p>
               )}
             </div>
-            <button onClick={desconectar} className="text-sm font-medium text-red-600 hover:underline">
+            <button
+              onClick={desconectar}
+              className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+            >
               Desconectar
             </button>
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-6 text-center">
-          <p className="mb-4 text-sm text-slate-600">Conecte sua conta do Google Ads para enviar conversões offline.</p>
+        <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+          <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+            Conecte sua conta do Google Ads para enviar conversões offline.
+          </p>
           <button
             onClick={conectar}
-            className="rounded-md bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-md bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
           >
             Conectar conta do Google
           </button>
@@ -141,7 +150,7 @@ export default function GoogleAds() {
       )}
 
       {status?.conectado && !status.customerId && (
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium">
               {mccAberta ? `Contas dentro de ${mccAberta.nome}` : "Escolha a conta do Google Ads"}
@@ -152,28 +161,32 @@ export default function GoogleAds() {
                   setMccAberta(null);
                   setSubcontas(null);
                 }}
-                className="text-sm text-slate-500 hover:underline"
+                className="text-sm text-slate-500 hover:underline dark:text-slate-400"
               >
                 ← voltar
               </button>
             )}
           </div>
-          {ocupado && <p className="text-sm text-slate-500">Carregando…</p>}
+          {ocupado && <p className="text-sm text-slate-500 dark:text-slate-400">Carregando…</p>}
           <ul className="space-y-2">
             {(listaAtual ?? []).map((c) => (
               <li key={c.customerId}>
                 <button
                   onClick={() => (mccAberta ? escolherConta(c, mccAberta) : abrirConta(c))}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                 >
-                  {c.nome} <span className="text-slate-400">({c.customerId})</span>
-                  {c.isManager && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">MCC</span>}
+                  {c.nome} <span className="text-slate-400 dark:text-slate-500">({c.customerId})</span>
+                  {c.isManager && (
+                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      MCC
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
           </ul>
           {listaAtual && listaAtual.length === 0 && (
-            <p className="text-sm text-slate-500">Nenhuma conta encontrada aqui.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Nenhuma conta encontrada aqui.</p>
           )}
         </div>
       )}
@@ -181,9 +194,9 @@ export default function GoogleAds() {
       {campanhas && (
         <div>
           <h2 className="mb-3 text-lg font-medium">Campanhas (últimos 30 dias)</h2>
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-2">Campanha</th>
                   <th className="px-4 py-2">Status</th>
@@ -193,7 +206,7 @@ export default function GoogleAds() {
               </thead>
               <tbody>
                 {campanhas.map((c) => (
-                  <tr key={c.id} className="border-t border-slate-100">
+                  <tr key={c.id} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="px-4 py-2">{c.nome}</td>
                     <td className="px-4 py-2">{c.status}</td>
                     <td className="px-4 py-2">{c.cliques}</td>
