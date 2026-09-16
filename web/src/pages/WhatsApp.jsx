@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 export default function WhatsApp() {
+  const navigate = useNavigate();
   const { empresaId } = useParams();
   const [status, setStatus] = useState(null);
   const [credenciais, setCredenciais] = useState(null);
@@ -143,13 +144,21 @@ export default function WhatsApp() {
             Cria a sessão na D-API automaticamente, já com o nome desta empresa e o webhook configurado — sem
             precisar entrar no painel da D-API.
           </p>
-          <button
-            onClick={criarSessaoAutomaticamente}
-            disabled={criandoSessao}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {criandoSessao ? "Criando…" : "Criar sessão automaticamente"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={criarSessaoAutomaticamente}
+              disabled={criandoSessao}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {criandoSessao ? "Criando…" : "Criar sessão automaticamente"}
+            </button>
+            <button
+              onClick={() => navigate(`/app/empresas/${empresaId}`)}
+              className="text-sm font-medium text-slate-500 hover:underline"
+            >
+              Configurar depois
+            </button>
+          </div>
         </div>
       )}
 

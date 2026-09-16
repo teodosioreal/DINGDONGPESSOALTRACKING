@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 export default function Empresas() {
+  const navigate = useNavigate();
   const [empresas, setEmpresas] = useState(null);
   const [nome, setNome] = useState("");
   const [erro, setErro] = useState("");
@@ -27,9 +28,9 @@ export default function Empresas() {
     setCriando(true);
     setErro("");
     try {
-      await api.criarEmpresa(nome.trim());
+      const r = await api.criarEmpresa(nome.trim());
       setNome("");
-      await carregar();
+      navigate(`/app/empresas/${r.empresa.id}/whatsapp`);
     } catch (e) {
       setErro(e.message);
     } finally {
