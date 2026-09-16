@@ -144,6 +144,16 @@ export async function criarSessaoAutomatica(empresa) {
       sessionId,
       type: "unofficial",
       webhookUrl,
+      // O campo "webhookUrl" sozinho não ativa a entrega — a D-API exige
+      // webhookConfig.enabled=true (confirmado no OpenAPI oficial), senão a
+      // sessão fica criada com o webhook desligado por padrão.
+      webhookConfig: {
+        enabled: true,
+        type: "single",
+        events: {
+          "messages.received": { enabled: true, webhookUrl },
+        },
+      },
       connectionMode: "qr",
       ignoreGroups: true,
       ignoreStatus: true,
