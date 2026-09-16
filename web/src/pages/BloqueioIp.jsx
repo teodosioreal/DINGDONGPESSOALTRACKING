@@ -21,17 +21,23 @@ function formatarData(dataIso) {
   }
 }
 
+const RECOMENDADO = { cliques: 5, minutos: 5 };
+
 export default function BloqueioIp() {
   const { empresaId } = useParams();
   const [visitas, setVisitas] = useState([]);
+  const [config, setConfig] = useState(null);
   const [erro, setErro] = useState("");
+  const [avisoConfig, setAvisoConfig] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState("");
+  const [salvandoConfig, setSalvandoConfig] = useState(false);
 
   async function carregar() {
     try {
       const r = await api.visitasIp(empresaId);
       setVisitas(r.visitas);
+      setConfig(r.config);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -61,6 +67,21 @@ export default function BloqueioIp() {
     }
   }
 
+  async function salvarConfig(e) {
+    e.preventDefault();
+    setSalvandoConfig(true);
+    setErro("");
+    setAvisoConfig("");
+    try {
+      await api.configurarBloqueioAuto(empresaId, config.ativo, Number(config.cliques), Number(config.minutos));
+      setAvisoConfig("Critério salvo.");
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setSalvandoConfig(false);
+    }
+  }
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -77,6 +98,72 @@ export default function BloqueioIp() {
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
           {erro}
         </p>
+      )}
+
+      {config && (
+        <form
+          onSubmit={salvarConfig}
+          className="space-y-3 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Bloqueio automático</h2>
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={config.ativo}
+                onChange={(e) => setConfig({ ...config, ativo: e.target.checked })}
+                className="size-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800"
+              />
+              Ativado
+            </label>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Se o mesmo IP fizer mais de <strong>X cliques vindos de anúncio</strong> em <strong>Y minutos</strong>,
+            ele é bloqueado sozinho — sem precisar você olhar e clicar. O recomendado é{" "}
+            <strong>
+              {RECOMENDADO.cliques} cliques em {RECOMENDADO.minutos} minutos
+            </strong>
+            , mas o critério é todo seu.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Cliques</label>
+              <input
+                type="number"
+                min={2}
+                max={100}
+                value={config.cliques}
+                onChange={(e) => setConfig({ ...config, cliques: e.target.value })}
+                className="w-24 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </div>
+            <span className="pb-2 text-sm text-slate-400 dark:text-slate-500">em</span>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Minutos</label>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={config.minutos}
+                onChange={(e) => setConfig({ ...config, minutos: e.target.value })}
+                className="w-24 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={salvandoConfig}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+            >
+              Salvar critério
+            </button>
+            {(Number(config.cliques) === RECOMENDADO.cliques && Number(config.minutos) === RECOMENDADO.minutos) && (
+              <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-950/40 dark:text-green-400">
+                Recomendado
+              </span>
+            )}
+          </div>
+          {avisoConfig && <p className="text-sm text-green-700 dark:text-green-400">{avisoConfig}</p>}
+        </form>
       )}
 
       {carregando ? (
@@ -119,9 +206,14 @@ export default function BloqueioIp() {
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{formatarData(v.ultima_visita)}</td>
                   <td className="px-4 py-3">
                     {v.bloqueado ? (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
-                        Bloqueado
-                      </span>
+                      <div>
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                          Bloqueado
+                        </span>
+                        {v.motivoBloqueio && (
+                          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{v.motivoBloqueio}</p>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400 dark:text-slate-500">Liberado</span>
                     )}

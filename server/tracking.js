@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { db } from "./db.js";
+import { db, buscarEmpresa, ipEstaBloqueado, bloquearIp, contarCliquesRecentesDoIp } from "./db.js";
 
 /** Código curto embutido na mensagem pré-preenchida do link do WhatsApp. */
 export function gerarCodigo() {
@@ -22,6 +22,28 @@ export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, i
     ip: ip ?? null,
     campanha: campanha ?? null,
   });
+
+  if (origem !== "sem_rastreio" && ip) {
+    verificarCliqueSuspeito(empresaId, ip);
+  }
+}
+
+/**
+ * Bloqueio automático de IP: se um IP fizer mais cliques vindos de anúncio do
+ * que o limite configurado, dentro da janela de tempo configurada, ele é
+ * bloqueado sozinho (mesmo efeito de bloquear na mão — vendas futuras desse
+ * IP não mandam conversão pro Google Ads). Cada empresa escolhe seu próprio
+ * limite em Bloqueio de IP; o padrão recomendado é 5 cliques em 5 minutos.
+ */
+function verificarCliqueSuspeito(empresaId, ip) {
+  const empresa = buscarEmpresa(empresaId);
+  if (!empresa?.bloqueio_auto_ativo) return;
+  if (ipEstaBloqueado(empresaId, ip)) return;
+
+  const contagem = contarCliquesRecentesDoIp(empresaId, ip, empresa.bloqueio_auto_minutos);
+  if (contagem >= empresa.bloqueio_auto_cliques) {
+    bloquearIp(empresaId, ip, `${contagem} cliques em ${empresa.bloqueio_auto_minutos} min (automático)`);
+  }
 }
 
 /** Atualiza o tempo de permanência (em segundos) do clique — enviado quando a pessoa sai da página. */

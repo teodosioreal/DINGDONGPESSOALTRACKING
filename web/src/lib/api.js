@@ -84,4 +84,6 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/ip-bloqueio/bloquear`, { method: "POST", body: { ip } }),
   desbloquearIp: (empresaId, ip) =>
     chamar(`/api/empresas/${empresaId}/ip-bloqueio/desbloquear`, { method: "POST", body: { ip } }),
+  configurarBloqueioAuto: (empresaId, ativo, cliques, minutos) =>
+    chamar(`/api/empresas/${empresaId}/ip-bloqueio/config`, { method: "PUT", body: { ativo, cliques, minutos } }),
 };

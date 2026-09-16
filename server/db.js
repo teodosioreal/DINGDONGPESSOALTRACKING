@@ -26,6 +26,9 @@ function criarSchema() {
     palavras_chave TEXT NOT NULL DEFAULT '',
     confirmar_antes_de_enviar INTEGER NOT NULL DEFAULT 1,
     moeda TEXT NOT NULL DEFAULT 'BRL',
+    bloqueio_auto_ativo INTEGER NOT NULL DEFAULT 1,
+    bloqueio_auto_cliques INTEGER NOT NULL DEFAULT 5,
+    bloqueio_auto_minutos INTEGER NOT NULL DEFAULT 5,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -88,6 +91,7 @@ function criarSchema() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     ip TEXT NOT NULL,
+    motivo TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_bloqueados_empresa_ip ON ips_bloqueados(empresa_id, ip);
@@ -192,6 +196,10 @@ function migrarColunasNovas() {
   adicionarColuna("conversas", "envio_agendado_para", "TEXT");
   adicionarColuna("conversas", "fila_tentativas", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("conversas", "nao_lida", "INTEGER NOT NULL DEFAULT 0");
+  adicionarColuna("empresas", "bloqueio_auto_ativo", "INTEGER NOT NULL DEFAULT 1");
+  adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
+  adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
+  adicionarColuna("ips_bloqueados", "motivo", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
 }
@@ -256,8 +264,12 @@ export function apagarEmpresa(id) {
 
 /* ----------------------------------------------------------- bloqueio de IP */
 
-export function bloquearIp(empresaId, ip) {
-  db.prepare("INSERT OR IGNORE INTO ips_bloqueados (empresa_id, ip) VALUES (?, ?)").run(empresaId, ip);
+export function bloquearIp(empresaId, ip, motivo = null) {
+  db.prepare("INSERT OR IGNORE INTO ips_bloqueados (empresa_id, ip, motivo) VALUES (?, ?, ?)").run(
+    empresaId,
+    ip,
+    motivo,
+  );
 }
 
 export function desbloquearIp(empresaId, ip) {
@@ -271,6 +283,22 @@ export function listarIpsBloqueados(empresaId) {
 export function ipEstaBloqueado(empresaId, ip) {
   if (!ip) return false;
   return Boolean(db.prepare("SELECT 1 FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").get(empresaId, ip));
+}
+
+/** Quantos cliques vindos de anúncio (gclid/fbclid) esse IP fez nos últimos N minutos, nessa empresa. */
+export function contarCliquesRecentesDoIp(empresaId, ip, minutos) {
+  return db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM clicks
+       WHERE empresa_id = ? AND ip = ? AND origem != 'sem_rastreio' AND criado_em >= datetime('now', ?)`,
+    )
+    .get(empresaId, ip, `-${minutos} minutes`).n;
+}
+
+export function atualizarConfigBloqueioAuto(empresaId, { ativo, cliques, minutos }) {
+  db.prepare(
+    "UPDATE empresas SET bloqueio_auto_ativo = ?, bloqueio_auto_cliques = ?, bloqueio_auto_minutos = ? WHERE id = ?",
+  ).run(ativo ? 1 : 0, cliques, minutos, empresaId);
 }
 
 /** Visitas agrupadas por IP (mais recentes primeiro), pra tela de Bloqueio de IP. */
