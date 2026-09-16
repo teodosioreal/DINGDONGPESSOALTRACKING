@@ -121,16 +121,34 @@ async function obterAccessToken(refreshToken) {
   return { token: d.access_token };
 }
 
-function cabecalhos(token, developerToken) {
-  return {
+function cabecalhos(token, developerToken, loginCustomerId) {
+  const h = {
     Authorization: `Bearer ${token}`,
     "developer-token": developerToken,
     "Content-Type": "application/json",
   };
+  if (loginCustomerId) h["login-customer-id"] = loginCustomerId;
+  return h;
 }
 
 function limparId(v) {
   return (v || "").replace(/\D/g, "");
+}
+
+/**
+ * Número da MCC (conta gerenciadora), quando o developer token foi obtido
+ * numa MCC. Sem isso, chamadas em contas de anúncio individuais tendem a
+ * falhar com erro de permissão mesmo com o token certo.
+ */
+function mccConfigurada() {
+  return limparId(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "");
+}
+
+/** Só manda o login-customer-id quando é diferente da própria conta operada. */
+function loginParaConta(customerId) {
+  const mcc = mccConfigurada();
+  const id = limparId(customerId);
+  return mcc && mcc !== id ? mcc : undefined;
 }
 
 function mensagemAmigavel(bruto, status) {
@@ -197,6 +215,12 @@ export async function listarContas() {
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { contas: [], erro: auth.erro };
 
+  const mcc = mccConfigurada();
+  // Com developer token de MCC, as contas de anúncio de verdade normalmente
+  // não aparecem em "listAccessibleCustomers" — precisam ser buscadas como
+  // subcontas da própria MCC.
+  if (mcc) return listarSubcontas(auth.token, c.developerToken, mcc);
+
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers:listAccessibleCustomers`, {
     headers: cabecalhos(auth.token, c.developerToken),
   });
@@ -212,11 +236,11 @@ export async function listarContas() {
   return { contas };
 }
 
-async function nomeDaConta(token, developerToken, customerId) {
+async function nomeDaConta(token, developerToken, customerId, loginCustomerId) {
   try {
     const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
       method: "POST",
-      headers: cabecalhos(token, developerToken),
+      headers: cabecalhos(token, developerToken, loginCustomerId),
       body: JSON.stringify({ query: "SELECT customer.descriptive_name FROM customer LIMIT 1" }),
     });
     const d = await res.json().catch(() => ({}));
@@ -224,6 +248,28 @@ async function nomeDaConta(token, developerToken, customerId) {
   } catch {
     return "";
   }
+}
+
+/** Contas anunciantes (clientes) de dentro da MCC configurada. */
+async function listarSubcontas(token, developerToken, mccId) {
+  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${mccId}/googleAds:search`, {
+    method: "POST",
+    headers: cabecalhos(token, developerToken, mccId),
+    body: JSON.stringify({
+      query: `SELECT customer_client.id, customer_client.descriptive_name
+              FROM customer_client
+              WHERE customer_client.status = 'ENABLED' AND customer_client.manager = false`,
+    }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { contas: [], erro: mensagemAmigavel(d.error?.message, res.status) };
+  const contas = (d.results ?? [])
+    .map((r) => ({
+      customerId: limparId(r.customerClient?.id ?? ""),
+      nome: r.customerClient?.descriptiveName || `Conta ${r.customerClient?.id ?? ""}`,
+    }))
+    .filter((c) => c.customerId);
+  return { contas };
 }
 
 export async function listarCampanhas() {
@@ -237,7 +283,7 @@ export async function listarCampanhas() {
 
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
     method: "POST",
-    headers: cabecalhos(auth.token, c.developerToken),
+    headers: cabecalhos(auth.token, c.developerToken, loginParaConta(customerId)),
     body: JSON.stringify({
       query: `SELECT campaign.id, campaign.name, campaign.status, metrics.clicks, metrics.impressions
               FROM campaign WHERE segments.date DURING LAST_30_DAYS`,
@@ -256,10 +302,10 @@ export async function listarCampanhas() {
   return { campanhas };
 }
 
-async function acaoDeConversao(token, developerToken, customerId) {
+async function acaoDeConversao(token, developerToken, customerId, loginCustomerId) {
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
     method: "POST",
-    headers: cabecalhos(token, developerToken),
+    headers: cabecalhos(token, developerToken, loginCustomerId),
     body: JSON.stringify({
       query: `SELECT conversion_action.id, conversion_action.resource_name
               FROM conversion_action WHERE conversion_action.name = '${NOME_CONVERSAO}' LIMIT 1`,
@@ -291,18 +337,19 @@ export async function enviarConversaoGoogle({ gclid, valor, moeda = "BRL", quand
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const acao = await acaoDeConversao(auth.token, c.developerToken, customerId);
+  const login = loginParaConta(customerId);
+  const acao = await acaoDeConversao(auth.token, c.developerToken, customerId, login);
   if (!acao.acaoId) return { ok: false, erro: acao.erro };
 
   const data = quando ?? new Date();
+  const destino = {
+    reference: "leadconvertido",
+    operatingAccount: { accountType: "GOOGLE_ADS", accountId: customerId },
+    productDestinationId: acao.acaoId,
+  };
+  if (login) destino.loginAccount = { accountType: "GOOGLE_ADS", accountId: login };
   const payload = {
-    destinations: [
-      {
-        reference: "leadconvertido",
-        operatingAccount: { accountType: "GOOGLE_ADS", accountId: customerId },
-        productDestinationId: acao.acaoId,
-      },
-    ],
+    destinations: [destino],
     events: [
       {
         destinationReferences: ["leadconvertido"],
