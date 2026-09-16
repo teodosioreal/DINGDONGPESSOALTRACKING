@@ -37,6 +37,20 @@ export default function Empresas() {
     }
   }
 
+  async function excluir(emp) {
+    const confirmou = window.confirm(
+      `Excluir "${emp.nome}"? Isso apaga também as conversas, conexões e regras dela. Não tem como desfazer.`,
+    );
+    if (!confirmou) return;
+    setErro("");
+    try {
+      await api.apagarEmpresa(emp.id);
+      await carregar();
+    } catch (e) {
+      setErro(e.message);
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Empresas</h1>
@@ -62,29 +76,37 @@ export default function Empresas() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {(empresas ?? []).map((emp) => (
-          <Link
+          <div
             key={emp.id}
-            to={`/app/empresas/${emp.id}`}
-            className="rounded-lg border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm"
+            className="relative rounded-lg border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm"
           >
-            <p className="font-medium">{emp.nome}</p>
-            <div className="mt-3 flex gap-2 text-xs">
-              <span
-                className={`rounded-full px-2 py-1 font-medium ${
-                  emp.googleConectado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                Google Ads {emp.googleConectado ? "conectado" : "pendente"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-1 font-medium ${
-                  emp.whatsappConfigurado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
-                }`}
-              >
-                WhatsApp {emp.whatsappConfigurado ? "configurado" : "pendente"}
-              </span>
-            </div>
-          </Link>
+            <button
+              onClick={() => excluir(emp)}
+              title="Excluir empresa"
+              className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+            >
+              Excluir
+            </button>
+            <Link to={`/app/empresas/${emp.id}`} className="block pr-14">
+              <p className="font-medium">{emp.nome}</p>
+              <div className="mt-3 flex gap-2 text-xs">
+                <span
+                  className={`rounded-full px-2 py-1 font-medium ${
+                    emp.googleConectado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  Google Ads {emp.googleConectado ? "conectado" : "pendente"}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 font-medium ${
+                    emp.whatsappConfigurado ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  WhatsApp {emp.whatsappConfigurado ? "configurado" : "pendente"}
+                </span>
+              </div>
+            </Link>
+          </div>
         ))}
       </div>
 
