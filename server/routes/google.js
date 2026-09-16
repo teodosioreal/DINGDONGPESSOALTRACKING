@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   urlDeConsentimento,
-  estadoValido,
+  lerEstado,
   trocarCodigoPorToken,
   emailDoAccessToken,
   conexaoSalva,
@@ -13,10 +13,10 @@ import {
   listarCampanhas,
 } from "../googleAds.js";
 
-export const googleRouter = Router();
+export const googleRouter = Router({ mergeParams: true });
 
-googleRouter.get("/status", (_req, res) => {
-  const c = conexaoSalva();
+googleRouter.get("/status", (req, res) => {
+  const c = conexaoSalva(req.empresaId);
   res.json({
     conectado: Boolean(c.refreshToken),
     email: c.email,
@@ -25,19 +25,19 @@ googleRouter.get("/status", (_req, res) => {
   });
 });
 
-googleRouter.get("/auth-url", (_req, res) => {
-  const r = urlDeConsentimento();
+googleRouter.get("/auth-url", (req, res) => {
+  const r = urlDeConsentimento(req.empresaId);
   if (r.erro) return res.status(400).json({ erro: r.erro });
   res.json({ url: r.url });
 });
 
-googleRouter.post("/desconectar", (_req, res) => {
-  desconectarGoogle();
+googleRouter.post("/desconectar", (req, res) => {
+  desconectarGoogle(req.empresaId);
   res.json({ ok: true });
 });
 
-googleRouter.get("/contas", async (_req, res) => {
-  const r = await listarContas();
+googleRouter.get("/contas", async (req, res) => {
+  const r = await listarContas(req.empresaId);
   if (r.erro) return res.status(400).json({ erro: r.erro });
   res.json({ contas: r.contas });
 });
@@ -45,7 +45,7 @@ googleRouter.get("/contas", async (_req, res) => {
 /** Subcontas de uma MCC específica — usado quando a conta escolhida é gerenciadora. */
 googleRouter.get("/contas/:mccId/subcontas", async (req, res) => {
   if (!/^\d+$/.test(req.params.mccId)) return res.status(400).json({ erro: "MCC inválida." });
-  const r = await listarSubcontasDe(req.params.mccId);
+  const r = await listarSubcontasDe(req.empresaId, req.params.mccId);
   if (r.erro) return res.status(400).json({ erro: r.erro });
   res.json({ contas: r.contas });
 });
@@ -53,35 +53,42 @@ googleRouter.get("/contas/:mccId/subcontas", async (req, res) => {
 googleRouter.post("/contas/escolher", (req, res) => {
   const { customerId, nome, loginCustomerId } = req.body ?? {};
   if (!customerId) return res.status(400).json({ erro: "customerId obrigatório." });
-  salvarContaEscolhida({ customerId, nome, loginCustomerId });
+  salvarContaEscolhida(req.empresaId, { customerId, nome, loginCustomerId });
   res.json({ ok: true });
 });
 
-googleRouter.get("/campanhas", async (_req, res) => {
-  const r = await listarCampanhas();
+googleRouter.get("/campanhas", async (req, res) => {
+  const r = await listarCampanhas(req.empresaId);
   if (r.erro) return res.status(400).json({ erro: r.erro });
   res.json({ campanhas: r.campanhas });
 });
 
 /**
  * Callback público do OAuth do Google — precisa estar fora da autenticação
- * de sessão (o Google chama direto), mas é protegido pelo `state` assinado.
- * Registrado sem o prefixo /api pois é um redirect_uri "de raiz".
+ * de sessão (o Google chama direto), mas é protegido pelo `state` assinado
+ * (que carrega o id da empresa). Registrado sem o prefixo /api pois é um
+ * redirect_uri "de raiz".
  */
 export function registrarCallbackGoogle(app) {
   app.get("/auth/callback/google-ads", async (req, res) => {
     const base = (process.env.APP_PUBLIC_URL ?? "").replace(/\/$/, "");
     const { code, state, error } = req.query;
-    if (error) return res.redirect(`${base}/app/google-ads?erro=${encodeURIComponent(String(error))}`);
-    if (!code || !state || !estadoValido(String(state))) {
-      return res.redirect(`${base}/app/google-ads?erro=${encodeURIComponent("Retorno inválido do Google.")}`);
+    const estado = state ? lerEstado(String(state)) : { erro: "Retorno inválido do Google." };
+    const destino = (empresaId) => `${base}/app/empresas/${empresaId}/google-ads`;
+
+    if (estado.erro) {
+      return res.redirect(`${base}/app?erro=${encodeURIComponent(estado.erro)}`);
+    }
+    if (error) return res.redirect(`${destino(estado.empresaId)}?erro=${encodeURIComponent(String(error))}`);
+    if (!code) {
+      return res.redirect(`${destino(estado.empresaId)}?erro=${encodeURIComponent("Retorno inválido do Google.")}`);
     }
     const r = await trocarCodigoPorToken(String(code));
     if (r.erro || !r.refreshToken) {
-      return res.redirect(`${base}/app/google-ads?erro=${encodeURIComponent(r.erro ?? "Falha ao conectar.")}`);
+      return res.redirect(`${destino(estado.empresaId)}?erro=${encodeURIComponent(r.erro ?? "Falha ao conectar.")}`);
     }
     const email = r.accessToken ? await emailDoAccessToken(r.accessToken).catch(() => "") : "";
-    salvarConexao({ refreshToken: r.refreshToken, email });
-    res.redirect(`${base}/app/google-ads?conectado=1`);
+    salvarConexao(estado.empresaId, { refreshToken: r.refreshToken, email });
+    res.redirect(`${destino(estado.empresaId)}?conectado=1`);
   });
 }

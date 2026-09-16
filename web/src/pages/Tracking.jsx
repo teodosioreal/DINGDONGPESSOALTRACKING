@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 
 export default function Tracking() {
+  const { empresaId } = useParams();
   const [copiado, setCopiado] = useState(false);
-  const script = `<script src="${window.location.origin}/t.js" async></script>`;
+  const script = `<script src="${window.location.origin}/t.js" data-empresa="${empresaId}" async></script>`;
 
   function copiar() {
     navigator.clipboard.writeText(script).then(() => {

@@ -3,12 +3,14 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import "./db.js"; // garante que o schema é criado ao subir
+import "./db.js"; // garante que o schema é criado (e migrado) ao subir
 import { authRouter } from "./routes/auth.js";
+import { empresasRouter, empresaRouter } from "./routes/empresas.js";
 import { googleRouter, registrarCallbackGoogle } from "./routes/google.js";
 import { whatsappRouter, whatsappWebhookRouter } from "./routes/whatsapp.js";
 import { trackPublicRouter } from "./routes/track.js";
 import { conversasRouter, dashboardRouter } from "./routes/conversas.js";
+import { carregarEmpresa } from "./routes/empresaMiddleware.js";
 import { exigirSessao } from "./auth.js";
 
 const obrigatorias = ["SESSION_SECRET", "ADMIN_USER", "ADMIN_PASSWORD_HASH", "APP_PUBLIC_URL"];
@@ -31,10 +33,12 @@ app.use("/api/public", trackPublicRouter);
 app.use("/api/auth", authRouter);
 
 // Todo o resto de /api exige sessão logada.
-app.use("/api/google", exigirSessao, googleRouter);
-app.use("/api/whatsapp", exigirSessao, whatsappRouter);
-app.use("/api/conversas", exigirSessao, conversasRouter);
-app.use("/api/dashboard", exigirSessao, dashboardRouter);
+app.use("/api/empresas", exigirSessao, empresasRouter);
+app.use("/api/empresas/:empresaId", exigirSessao, carregarEmpresa, empresaRouter);
+app.use("/api/empresas/:empresaId/google", exigirSessao, carregarEmpresa, googleRouter);
+app.use("/api/empresas/:empresaId/whatsapp", exigirSessao, carregarEmpresa, whatsappRouter);
+app.use("/api/empresas/:empresaId/conversas", exigirSessao, carregarEmpresa, conversasRouter);
+app.use("/api/empresas/:empresaId/dashboard", exigirSessao, carregarEmpresa, dashboardRouter);
 
 // Frontend (build do Vite) — SPA: qualquer rota que não seja /api/* cai no index.html.
 const distDir = path.join(__dirname, "..", "web", "dist");

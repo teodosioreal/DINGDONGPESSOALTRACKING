@@ -1,7 +1,8 @@
 /**
  * DingDong — script de rastreamento (pixel).
- * Instale no <head> do seu site, antes de </head>:
- *   <script src="https://SEUDOMINIO/t.js" async></script>
+ * Instale no <head> do seu site, antes de </head> (troque SUA_EMPRESA_ID pelo
+ * número da empresa que aparece na tela "Instalar Rastreio" do painel):
+ *   <script src="https://SEUDOMINIO/t.js" data-empresa="SUA_EMPRESA_ID" async></script>
  *
  * O que ele faz:
  *  1. Lê gclid/fbclid da URL e guarda no navegador do visitante.
@@ -37,11 +38,17 @@
 
     var scriptAtual = document.currentScript;
     var origem = scriptAtual ? new URL(scriptAtual.src).origin : window.location.origin;
+    var empresaId = scriptAtual ? scriptAtual.getAttribute("data-empresa") : null;
+
+    if (!empresaId) {
+      console.error("[dingdong] script sem data-empresa — o rastreio não vai funcionar. Veja a tela Instalar Rastreio no painel.");
+      return;
+    }
 
     fetch(origem + "/api/public/click", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ codigo: codigo, gclid: gclid, fbclid: fbclid, url: window.location.href }),
+      body: JSON.stringify({ empresa: empresaId, codigo: codigo, gclid: gclid, fbclid: fbclid, url: window.location.href }),
       keepalive: true,
     }).catch(function () {});
 

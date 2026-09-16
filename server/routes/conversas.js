@@ -1,53 +1,59 @@
 import { Router } from "express";
-import { listarConversas, buscarConversa, listarMensagens, marcarVenda, registrarMensagemEnviada, resumoDashboard } from "../conversas.js";
-import { enviarConversaoGoogle } from "../googleAds.js";
+import {
+  listarConversas,
+  buscarConversa,
+  listarMensagens,
+  confirmarVenda,
+  descartarVendaProvavel,
+  registrarMensagemEnviada,
+  resumoDashboard,
+} from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 
-export const conversasRouter = Router();
+export const conversasRouter = Router({ mergeParams: true });
 
-conversasRouter.get("/", (_req, res) => {
-  res.json({ conversas: listarConversas() });
+conversasRouter.get("/", (req, res) => {
+  res.json({ conversas: listarConversas(req.empresaId) });
 });
 
 conversasRouter.get("/:id/mensagens", (req, res) => {
-  const conversa = buscarConversa(req.params.id);
+  const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   res.json({ conversa, mensagens: listarMensagens(conversa.id) });
 });
 
 conversasRouter.post("/:id/mensagens", async (req, res) => {
-  const conversa = buscarConversa(req.params.id);
+  const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   const texto = String(req.body?.texto ?? "").trim();
   if (!texto) return res.status(400).json({ erro: "Mensagem vazia." });
-  const r = await enviarMensagem(conversa.telefone, texto);
+  const r = await enviarMensagem(req.empresaId, conversa.telefone, texto);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
-  registrarMensagemEnviada({ telefone: conversa.telefone, texto });
+  registrarMensagemEnviada(req.empresaId, { telefone: conversa.telefone, texto });
   res.json({ ok: true });
 });
 
-/** Marca a conversa como vendida e, se houver gclid, envia a conversão pro Google Ads. */
+/** Confirma a venda (manual, ou confirmando uma "venda provável" detectada). */
 conversasRouter.post("/:id/venda", async (req, res) => {
-  const conversa = buscarConversa(req.params.id);
+  const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   const valor = Number(req.body?.valor);
   if (!Number.isFinite(valor) || valor <= 0) return res.status(400).json({ erro: "Informe um valor válido." });
 
-  let conversaoEnviada = false;
-  let respostaConversao = null;
-  if (conversa.gclid) {
-    const r = await enviarConversaoGoogle({ gclid: conversa.gclid, valor });
-    conversaoEnviada = r.ok;
-    respostaConversao = r.ok ? "Conversão enviada ao Google Ads." : r.erro;
-  } else {
-    respostaConversao = "Sem gclid nesta conversa — venda marcada, mas nada foi enviado ao Google Ads.";
-  }
-
-  marcarVenda(conversa.id, { valor, conversaoEnviada, respostaConversao });
-  res.json({ ok: true, conversaoEnviada, respostaConversao });
+  const empresa = req.empresa;
+  const r = await confirmarVenda(empresa, conversa, valor);
+  res.json({ ok: true, ...r });
 });
 
-export const dashboardRouter = Router();
-dashboardRouter.get("/resumo", (_req, res) => {
-  res.json(resumoDashboard());
+/** Descarta uma "venda provável" que a detecção por palavra-chave errou. */
+conversasRouter.post("/:id/descartar-venda", (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
+  descartarVendaProvavel(conversa.id);
+  res.json({ ok: true });
+});
+
+export const dashboardRouter = Router({ mergeParams: true });
+dashboardRouter.get("/resumo", (req, res) => {
+  res.json(resumoDashboard(req.empresaId));
 });

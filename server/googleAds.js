@@ -1,17 +1,13 @@
 /**
- * Integração com a API do Google Ads (REST) — versão single-user.
+ * Integração com a API do Google Ads (REST) — multi-empresa.
  *
- * Você cria seu próprio app OAuth no Google Cloud Console e usa seu próprio
- * developer token. O refresh token da conexão fica salvo na tabela `config`
- * (uma única conexão, é uso pessoal).
- *
- * A "conta de login" (login-customer-id / MCC) NÃO é fixa: ela é descoberta
- * dinamicamente a partir de qual conta você escolhe no painel — assim
- * funciona com qualquer MCC que o e-mail conectado tiver acesso, sem
- * precisar configurar nada fixo no .env.
+ * O app OAuth (client id/secret) e o developer token são do SEU projeto no
+ * Google Cloud e ficam no .env, compartilhados. Cada EMPRESA autoriza a
+ * PRÓPRIA conta do Google Ads (refresh token, conta escolhida e MCC de
+ * login, se houver, ficam guardados por empresa em `google_conexoes`).
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getConfig, setConfig, apagarConfig } from "./db.js";
+import { db } from "./db.js";
 
 const ESCOPO_ADS = "https://www.googleapis.com/auth/adwords";
 const ESCOPO_DATA_MANAGER = "https://www.googleapis.com/auth/datamanager";
@@ -51,25 +47,29 @@ function segredoEstado() {
   return process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.SESSION_SECRET ?? "dingdong";
 }
 
-function assinarEstado() {
-  const corpo = `dingdong.${Date.now()}`;
+/** Assina o id da empresa no `state` do OAuth, pra saber qual empresa volta no callback. */
+function assinarEstado(empresaId) {
+  const corpo = `${empresaId}.${Date.now()}`;
   const assinatura = createHmac("sha256", segredoEstado()).update(corpo).digest("hex");
   return `${Buffer.from(corpo).toString("base64url")}.${assinatura}`;
 }
 
-export function estadoValido(estado) {
+export function lerEstado(estado) {
   const [dados, assinatura] = (estado || "").split(".");
-  if (!dados || !assinatura) return false;
+  if (!dados || !assinatura) return { erro: "Retorno inválido do Google." };
   const corpo = Buffer.from(dados, "base64url").toString();
   const esperado = createHmac("sha256", segredoEstado()).update(corpo).digest("hex");
   const a = Buffer.from(assinatura);
   const b = Buffer.from(esperado);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return false;
-  const [, quando] = corpo.split(".");
-  return Date.now() - Number(quando) <= 30 * 60 * 1000;
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return { erro: "Retorno inválido do Google." };
+  const [empresaId, quando] = corpo.split(".");
+  if (!empresaId || Date.now() - Number(quando) > 30 * 60 * 1000) {
+    return { erro: "O pedido de conexão expirou. Tente novamente." };
+  }
+  return { empresaId: Number(empresaId) };
 }
 
-export function urlDeConsentimento() {
+export function urlDeConsentimento(empresaId) {
   const c = lerCredenciaisApp();
   if (c.erro) return { erro: c.erro };
   const p = new URLSearchParams({
@@ -80,7 +80,7 @@ export function urlDeConsentimento() {
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",
-    state: assinarEstado(),
+    state: assinarEstado(empresaId),
   });
   return { url: `https://accounts.google.com/o/oauth2/v2/auth?${p.toString()}` };
 }
@@ -157,43 +157,34 @@ function mensagemAmigavel(bruto, status) {
 
 /* ---------------------------------------------------------- conexão salva */
 
-export function conexaoSalva() {
+export function conexaoSalva(empresaId) {
+  const c = db.prepare("SELECT * FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
   return {
-    refreshToken: getConfig("google_refresh_token"),
-    email: getConfig("google_email"),
-    customerId: getConfig("google_customer_id"),
-    customerNome: getConfig("google_customer_nome"),
-    loginCustomerId: getConfig("google_login_customer_id") || undefined,
+    refreshToken: c?.refresh_token ?? null,
+    email: c?.email ?? null,
+    customerId: c?.customer_id ?? null,
+    customerNome: c?.customer_nome ?? null,
+    loginCustomerId: c?.login_customer_id ?? undefined,
   };
 }
 
-export function salvarConexao({ refreshToken, email }) {
-  setConfig("google_refresh_token", refreshToken);
-  if (email) setConfig("google_email", email);
+export function salvarConexao(empresaId, { refreshToken, email }) {
+  db.prepare(
+    `INSERT INTO google_conexoes (empresa_id, refresh_token, email) VALUES (?, ?, ?)
+     ON CONFLICT(empresa_id) DO UPDATE SET refresh_token = excluded.refresh_token,
+       email = COALESCE(excluded.email, google_conexoes.email)`,
+  ).run(empresaId, refreshToken, email || null);
 }
 
-/**
- * `loginCustomerId` é a MCC usada como "conta de login" pra essa conta —
- * só é necessária quando a conta escolhida está dentro de uma MCC.
- */
-export function salvarContaEscolhida({ customerId, nome, loginCustomerId }) {
-  setConfig("google_customer_id", limparId(customerId));
-  setConfig("google_customer_nome", nome ?? "");
-  const login = limparId(loginCustomerId ?? "");
-  if (login) setConfig("google_login_customer_id", login);
-  else apagarConfig("google_login_customer_id");
+/** `loginCustomerId` é a MCC usada como "conta de login" — só necessária quando a conta é subconta de uma MCC. */
+export function salvarContaEscolhida(empresaId, { customerId, nome, loginCustomerId }) {
+  db.prepare(
+    `UPDATE google_conexoes SET customer_id = ?, customer_nome = ?, login_customer_id = ? WHERE empresa_id = ?`,
+  ).run(limparId(customerId), nome ?? null, limparId(loginCustomerId ?? "") || null, empresaId);
 }
 
-export function desconectarGoogle() {
-  for (const chave of [
-    "google_refresh_token",
-    "google_email",
-    "google_customer_id",
-    "google_customer_nome",
-    "google_login_customer_id",
-  ]) {
-    apagarConfig(chave);
-  }
+export function desconectarGoogle(empresaId) {
+  db.prepare("DELETE FROM google_conexoes WHERE empresa_id = ?").run(empresaId);
 }
 
 export async function emailDoAccessToken(token) {
@@ -214,11 +205,11 @@ export async function emailDoAccessToken(token) {
  * Contas diretamente acessíveis ao e-mail conectado — pode incluir MCCs
  * (aparecem com `isManager: true`) e contas de anúncio avulsas.
  */
-export async function listarContas() {
+export async function listarContas(empresaId) {
   const c = lerCredenciaisApp();
   if (c.erro) return { contas: [], erro: c.erro };
-  const { refreshToken } = conexaoSalva();
-  if (!refreshToken) return { contas: [], erro: "Conecte sua conta do Google primeiro." };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { contas: [], erro: "Conecte a conta do Google primeiro." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { contas: [], erro: auth.erro };
 
@@ -253,11 +244,11 @@ async function infoDaConta(token, developerToken, customerId, loginCustomerId) {
 }
 
 /** Contas anunciantes (clientes) de dentro de uma MCC específica. */
-export async function listarSubcontasDe(mccId) {
+export async function listarSubcontasDe(empresaId, mccId) {
   const c = lerCredenciaisApp();
   if (c.erro) return { contas: [], erro: c.erro };
-  const { refreshToken } = conexaoSalva();
-  if (!refreshToken) return { contas: [], erro: "Conecte sua conta do Google primeiro." };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { contas: [], erro: "Conecte a conta do Google primeiro." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { contas: [], erro: auth.erro };
 
@@ -281,16 +272,15 @@ export async function listarSubcontasDe(mccId) {
       nome: r.customerClient?.descriptiveName || `Conta ${r.customerClient?.id ?? ""}`,
       isManager: Boolean(r.customerClient?.manager),
     }))
-    // Não lista a própria MCC entre suas subcontas.
     .filter((x) => x.customerId && x.customerId !== id);
   return { contas };
 }
 
-export async function listarCampanhas() {
+export async function listarCampanhas(empresaId) {
   const c = lerCredenciaisApp();
   if (c.erro) return { campanhas: [], erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva();
-  if (!refreshToken) return { campanhas: [], erro: "Conecte sua conta do Google primeiro." };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken) return { campanhas: [], erro: "Conecte a conta do Google primeiro." };
   if (!customerId) return { campanhas: [], erro: "Escolha a conta do Google Ads primeiro." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { campanhas: [], erro: auth.erro };
@@ -337,15 +327,15 @@ async function acaoDeConversao(token, developerToken, customerId, loginCustomerI
 }
 
 /**
- * Envia uma conversão offline (venda) pelo clique (gclid) pra conta conectada.
+ * Envia uma conversão offline (venda) pelo clique (gclid) pra conta conectada da empresa.
  * Usa a Data Manager API (events:ingest) — não pede token de desenvolvedor
  * pra esta chamada específica, só para a busca da ação de conversão acima.
  */
-export async function enviarConversaoGoogle({ gclid, valor, moeda = "BRL", quando }) {
+export async function enviarConversaoGoogle(empresaId, { gclid, valor, moeda = "BRL", quando }) {
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva();
-  if (!refreshToken) return { ok: false, erro: "Conecte sua conta do Google primeiro." };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken) return { ok: false, erro: "Conecte a conta do Google primeiro." };
   if (!customerId) return { ok: false, erro: "Escolha a conta do Google Ads primeiro." };
 
   const auth = await obterAccessToken(refreshToken);

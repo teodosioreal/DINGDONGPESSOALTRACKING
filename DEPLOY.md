@@ -26,8 +26,8 @@ Você vai precisar, fora do servidor:
    - Ativar a "Google Ads API" no projeto.
 3. **Developer Token do Google Ads** — na sua conta Google Ads, em Ferramentas e Configurações → Central da API. Se ele só tiver acesso "Test accounts", conversões só funcionam em contas de teste até você solicitar o acesso Básico.
    - Não precisa anotar número de MCC — a tela Google Ads do painel lista as contas/MCCs acessíveis e deixa escolher, funciona com qualquer uma.
-4. **Conta D-API** com um número de WhatsApp — anotar o **Session ID** e a **API Key** (esses dois NÃO vão pro `.env`, você preenche direto na tela WhatsApp do painel depois que o app estiver no ar).
-5. No dashboard da D-API, configurar o webhook "Ao receber mensagem" para: `https://SEUDOMINIO/api/public/whatsapp/webhook?chave=SEGREDO_QUE_VOCE_ESCOLHER` (o mesmo valor vai no `WHATSAPP_WEBHOOK_SECRET` do `.env`).
+4. **Uma conta D-API por empresa/cliente**, cada uma com um número de WhatsApp — o **Session ID** e a **API Key** de cada uma você preenche depois, direto na tela WhatsApp daquela empresa no painel (nada disso vai pro `.env`).
+5. Para cada empresa, depois de criá-la no painel, a própria tela WhatsApp mostra a URL de webhook pronta (com o id da empresa e um segredo gerado automaticamente) — é só copiar e colar no dashboard da D-API daquela conta, no campo "Ao receber mensagem".
 
 ## 1. Provisionar a VPS
 
@@ -79,10 +79,9 @@ GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_ADS_DEVELOPER_TOKEN=...
 
 DAPI_BASE_URL=https://api.d-api.cloud
-WHATSAPP_WEBHOOK_SECRET=<o mesmo que você colocou na URL do webhook da D-API>
 ```
 
-O Session ID e a API Key da D-API **não vão aqui** — você preenche na tela WhatsApp do painel depois que o app estiver rodando (passo 6).
+O Session ID e a API Key de cada empresa na D-API **não vão aqui** — você preenche na tela WhatsApp de cada empresa, dentro do painel, depois que o app estiver rodando (passo 6).
 
 Gerar o hash da senha de login:
 
@@ -163,12 +162,14 @@ O Certbot já ajusta o Nginx pra redirecionar HTTP → HTTPS e agenda a renovaç
 ## 6. Testar de ponta a ponta
 
 1. Abra `https://SEUDOMINIO/login` e entre com o usuário/senha configurados.
-2. Vá em **Google Ads** → Conectar conta → autorize com sua conta Google → escolha a conta de anúncios (se aparecer marcada como "MCC", clique pra ver as contas de dentro dela e escolha a conta de anúncio de verdade).
-3. Vá em **WhatsApp** → cole o Session ID e a API Key da D-API → Salvar → gere o QR Code → escaneie com o celular.
+2. Vá em **Empresas** → crie uma empresa (ex: o nome do cliente).
+3. Dentro da empresa, vá em **Google Ads** → Conectar conta → autorize com a conta Google daquele cliente → escolha a conta de anúncios (se aparecer marcada como "MCC", clique pra ver as contas de dentro dela e escolha a conta de anúncio de verdade).
+4. Vá em **WhatsApp** → cole o Session ID e a API Key da D-API daquele cliente → Salvar → copie a URL de webhook mostrada na tela e cole no painel da D-API → gere o QR Code → escaneie com o celular.
    - Se o status/QR Code não carregar, os caminhos exatos da API da D-API podem ser diferentes dos que usei em `server/whatsapp.js` (marcado em comentário no arquivo) — confira a documentação da D-API e ajusta ali.
-4. Vá em **Instalar Rastreio** → copie o script → cole no `<head>` do seu site.
-5. Clique num link de WhatsApp do seu site com `?gclid=teste123` na URL, mande a mensagem — ela deve aparecer em **Conversas** já com origem "Google Ads".
-6. Marque uma venda de teste e confira a resposta do envio da conversão.
+5. Vá em **Regras de Venda** → cadastre as palavras-chave que indicam venda pra esse cliente (ex: "pagamento confirmado", "pix recebido") e decida se quer confirmar manualmente antes de enviar ao Google Ads.
+6. Vá em **Instalar Rastreio** → copie o script (já vem com o id certo da empresa) → cole no `<head>` do site desse cliente.
+7. Clique num link de WhatsApp do site com `?gclid=teste123` na URL, mande uma mensagem contendo uma das palavras-chave — a conversa deve aparecer em **Conversas** já com origem "Google Ads" e, se achou um valor em reais na mensagem, marcada como venda (automática ou "venda provável", dependendo da configuração).
+8. Repita os passos 2-7 pra cada empresa/cliente novo — cada uma é isolada das outras.
 
 ## Atualizar depois de uma mudança de código
 

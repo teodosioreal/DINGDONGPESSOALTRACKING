@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 const NOME_ORIGEM = { google: "Google Ads", meta: "Meta Ads", sem_rastreio: "Sem rastreio" };
 
 export default function Conversas() {
+  const { empresaId } = useParams();
   const [conversas, setConversas] = useState([]);
   const [selecionada, setSelecionada] = useState(null);
   const [mensagens, setMensagens] = useState([]);
@@ -12,27 +14,30 @@ export default function Conversas() {
   const [aviso, setAviso] = useState("");
 
   useEffect(() => {
+    setConversas([]);
+    setSelecionada(null);
     carregarLista();
     const t = setInterval(carregarLista, 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [empresaId]);
 
   async function carregarLista() {
-    const r = await api.conversas();
+    const r = await api.conversas(empresaId);
     setConversas(r.conversas);
   }
 
   async function abrir(conversa) {
     setSelecionada(conversa);
     setAviso("");
-    const r = await api.conversa(conversa.id);
+    setValorVenda(conversa.valor_sugerido ? String(conversa.valor_sugerido) : "");
+    const r = await api.conversa(empresaId, conversa.id);
     setMensagens(r.mensagens);
   }
 
   async function enviar(e) {
     e.preventDefault();
     if (!texto.trim() || !selecionada) return;
-    await api.enviarMensagem(selecionada.id, texto);
+    await api.enviarMensagem(empresaId, selecionada.id, texto);
     setTexto("");
     abrir(selecionada);
   }
@@ -41,13 +46,21 @@ export default function Conversas() {
     e.preventDefault();
     if (!selecionada) return;
     try {
-      const r = await api.marcarVenda(selecionada.id, valorVenda);
+      const r = await api.marcarVenda(empresaId, selecionada.id, valorVenda);
       setAviso(r.respostaConversao);
       setValorVenda("");
       carregarLista();
     } catch (e) {
       setAviso(e.message);
     }
+  }
+
+  async function descartarVendaProvavel() {
+    if (!selecionada) return;
+    await api.descartarVenda(empresaId, selecionada.id);
+    setAviso("Venda provável descartada — voltou a ser lead.");
+    setSelecionada((s) => ({ ...s, status: "lead", valor_sugerido: null }));
+    carregarLista();
   }
 
   return (
@@ -64,6 +77,9 @@ export default function Conversas() {
             <div className="flex items-center justify-between">
               <span className="font-medium">{c.nome || c.telefone}</span>
               {c.status === "vendido" && <span className="text-xs font-semibold text-green-600">VENDIDO</span>}
+              {c.status === "venda_provavel" && (
+                <span className="text-xs font-semibold text-amber-600">VENDA PROVÁVEL</span>
+              )}
             </div>
             <span className="text-xs text-slate-500">{NOME_ORIGEM[c.origem] ?? c.origem}</span>
           </button>
@@ -81,20 +97,37 @@ export default function Conversas() {
                 <p className="font-medium">{selecionada.nome || selecionada.telefone}</p>
                 <p className="text-xs text-slate-500">{selecionada.telefone}</p>
               </div>
-              <form onSubmit={marcarVenda} className="flex items-center gap-2">
-                <input
-                  value={valorVenda}
-                  onChange={(e) => setValorVenda(e.target.value)}
-                  placeholder="Valor da venda"
-                  className="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm"
-                />
-                <button type="submit" className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white">
-                  Marcar venda
-                </button>
-              </form>
+              {selecionada.status !== "vendido" && (
+                <form onSubmit={marcarVenda} className="flex items-center gap-2">
+                  <input
+                    value={valorVenda}
+                    onChange={(e) => setValorVenda(e.target.value)}
+                    placeholder="Valor da venda"
+                    className="w-32 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                  />
+                  <button type="submit" className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white">
+                    {selecionada.status === "venda_provavel" ? "Confirmar venda" : "Marcar venda"}
+                  </button>
+                  {selecionada.status === "venda_provavel" && (
+                    <button
+                      type="button"
+                      onClick={descartarVendaProvavel}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      Não é venda
+                    </button>
+                  )}
+                </form>
+              )}
             </div>
 
-            {aviso && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">{aviso}</p>}
+            {selecionada.status === "venda_provavel" && (
+              <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                Detectamos uma possível venda nessa conversa pela regra de palavra-chave. Confirme o valor e clique em
+                "Confirmar venda", ou descarte se estiver errado.
+              </p>
+            )}
+            {aviso && <p className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-sm text-slate-700">{aviso}</p>}
 
             <div className="flex-1 space-y-2 overflow-y-auto p-4">
               {mensagens.map((m) => (

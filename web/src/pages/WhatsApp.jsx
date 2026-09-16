@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 export default function WhatsApp() {
+  const { empresaId } = useParams();
   const [status, setStatus] = useState(null);
   const [credenciais, setCredenciais] = useState(null);
   const [sessionId, setSessionId] = useState("");
@@ -11,13 +13,20 @@ export default function WhatsApp() {
   const [codigo, setCodigo] = useState(null);
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState(null);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
+    setStatus(null);
+    setCredenciais(null);
+    setQr(null);
+    setCodigo(null);
     carregarCredenciais();
     carregarStatus();
+    api.empresa(empresaId).then((r) => setWebhookSecret(r.empresa.webhook_secret)).catch(() => {});
     const t = setInterval(carregarStatus, 8000);
     return () => clearInterval(t);
-  }, []);
+  }, [empresaId]);
 
   // Enquanto não conectar, busca/atualiza o QR Code a cada 5s (ele expira rápido).
   useEffect(() => {
@@ -26,7 +35,7 @@ export default function WhatsApp() {
 
     async function atualizarQr() {
       try {
-        const r = await api.whatsappQr();
+        const r = await api.whatsappQr(empresaId);
         if (cancelado) return;
         if (r.conectado) {
           setQr(null);
@@ -45,17 +54,17 @@ export default function WhatsApp() {
       cancelado = true;
       clearInterval(t);
     };
-  }, [credenciais?.temApiKey, status?.conectado]);
+  }, [empresaId, credenciais?.temApiKey, status?.conectado]);
 
   async function carregarCredenciais() {
-    const r = await api.whatsappCredenciais();
+    const r = await api.whatsappCredenciais(empresaId);
     setCredenciais(r);
     setSessionId(r.sessionId ?? "");
   }
 
   async function carregarStatus() {
     try {
-      setStatus(await api.whatsappStatus());
+      setStatus(await api.whatsappStatus(empresaId));
     } catch (e) {
       setErro(e.message);
     }
@@ -66,7 +75,7 @@ export default function WhatsApp() {
     setErro("");
     setAviso("");
     try {
-      await api.whatsappSalvarCredenciais(sessionId, apiKey);
+      await api.whatsappSalvarCredenciais(empresaId, sessionId, apiKey);
       setApiKey("");
       setAviso("Credenciais salvas.");
       await carregarCredenciais();
@@ -77,7 +86,7 @@ export default function WhatsApp() {
   }
 
   async function removerCredenciais() {
-    await api.whatsappRemoverCredenciais();
+    await api.whatsappRemoverCredenciais(empresaId);
     setSessionId("");
     setApiKey("");
     setQr(null);
@@ -89,7 +98,7 @@ export default function WhatsApp() {
   async function gerarCodigo() {
     setErro("");
     try {
-      const r = await api.whatsappCodigo(telefone);
+      const r = await api.whatsappCodigo(empresaId, telefone);
       setCodigo(r.codigo);
       setQr(null);
     } catch (e) {
@@ -98,7 +107,7 @@ export default function WhatsApp() {
   }
 
   async function desconectar() {
-    await api.whatsappDesconectar();
+    await api.whatsappDesconectar(empresaId);
     carregarStatus();
   }
 
@@ -151,6 +160,31 @@ export default function WhatsApp() {
         <span className="text-sm font-medium">{status?.conectado ? "Conectado" : "Desconectado"}</span>
         {status?.numero && <span className="text-sm text-slate-500">— {status.numero}</span>}
       </div>
+
+      {webhookSecret && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-2 text-sm font-medium text-amber-900">
+            Configure esta URL no painel da D-API como webhook "Ao receber mensagem" — sem isso as mensagens não chegam aqui:
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-md bg-white px-3 py-2 text-xs text-slate-700">
+              {`${window.location.origin}/api/public/whatsapp/webhook?empresa=${empresaId}&chave=${webhookSecret}`}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  `${window.location.origin}/api/public/whatsapp/webhook?empresa=${empresaId}&chave=${webhookSecret}`,
+                );
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 2000);
+              }}
+              className="shrink-0 rounded-md border border-amber-300 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100"
+            >
+              {copiado ? "Copiado!" : "Copiar"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {configurado && !status?.conectado && (
         <div className="rounded-lg border border-slate-200 bg-white p-6">

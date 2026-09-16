@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 const NOME_ORIGEM = { google: "Google Ads", meta: "Meta Ads", sem_rastreio: "Sem rastreio" };
 
 export default function Dashboard() {
+  const { empresaId } = useParams();
   const [resumo, setResumo] = useState(null);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
+    setResumo(null);
     api
-      .dashboard()
+      .dashboard(empresaId)
       .then(setResumo)
       .catch((e) => setErro(e.message));
-  }, []);
+  }, [empresaId]);
 
   if (erro) return <p className="text-red-600">{erro}</p>;
   if (!resumo) return <p className="text-slate-500">Carregando…</p>;
@@ -26,6 +29,13 @@ export default function Dashboard() {
         <Card titulo="Total de vendas" valor={resumo.totalVendas} />
         <Card titulo="Receita gerada" valor={formatarMoeda(resumo.receita)} />
       </div>
+
+      {resumo.vendasProvaveisPendentes > 0 && (
+        <p className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {resumo.vendasProvaveisPendentes} conversa(s) com venda provável esperando confirmação — veja em{" "}
+          <strong>Conversas</strong>.
+        </p>
+      )}
 
       <div>
         <h2 className="mb-3 text-lg font-medium">Por origem</h2>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 export default function GoogleAds() {
+  const { empresaId } = useParams();
   const [status, setStatus] = useState(null);
   const [contas, setContas] = useState(null);
   const [mccAberta, setMccAberta] = useState(null); // MCC sendo explorada, ou null pra lista principal
@@ -11,14 +13,19 @@ export default function GoogleAds() {
   const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => {
+    setStatus(null);
+    setContas(null);
+    setMccAberta(null);
+    setSubcontas(null);
+    setCampanhas(null);
     carregarStatus();
     const params = new URLSearchParams(window.location.search);
     if (params.get("erro")) setErro(params.get("erro"));
-  }, []);
+  }, [empresaId]);
 
   async function carregarStatus() {
     try {
-      const s = await api.googleStatus();
+      const s = await api.googleStatus(empresaId);
       setStatus(s);
       if (s.conectado && !s.customerId) carregarContas();
       if (s.conectado && s.customerId) carregarCampanhas();
@@ -30,7 +37,7 @@ export default function GoogleAds() {
   async function conectar() {
     setErro("");
     try {
-      const { url } = await api.googleAuthUrl();
+      const { url } = await api.googleAuthUrl(empresaId);
       window.location.href = url;
     } catch (e) {
       setErro(e.message);
@@ -38,7 +45,7 @@ export default function GoogleAds() {
   }
 
   async function desconectar() {
-    await api.googleDesconectar();
+    await api.googleDesconectar(empresaId);
     setStatus({ conectado: false });
     setContas(null);
     setMccAberta(null);
@@ -50,7 +57,7 @@ export default function GoogleAds() {
     setOcupado(true);
     setErro("");
     try {
-      const r = await api.googleContas();
+      const r = await api.googleContas(empresaId);
       setContas(r.contas);
     } catch (e) {
       setErro(e.message);
@@ -64,7 +71,7 @@ export default function GoogleAds() {
       setOcupado(true);
       setErro("");
       try {
-        const r = await api.googleSubcontas(conta.customerId);
+        const r = await api.googleSubcontas(empresaId, conta.customerId);
         setMccAberta(conta);
         setSubcontas(r.contas);
       } catch (e) {
@@ -80,7 +87,7 @@ export default function GoogleAds() {
   async function escolherConta(conta, mcc) {
     setErro("");
     try {
-      await api.googleEscolherConta(conta.customerId, conta.nome, mcc?.customerId);
+      await api.googleEscolherConta(empresaId, conta.customerId, conta.nome, mcc?.customerId);
       await carregarStatus();
     } catch (e) {
       setErro(e.message);
@@ -89,7 +96,7 @@ export default function GoogleAds() {
 
   async function carregarCampanhas() {
     try {
-      const r = await api.googleCampanhas();
+      const r = await api.googleCampanhas(empresaId);
       setCampanhas(r.campanhas);
     } catch (e) {
       setErro(e.message);

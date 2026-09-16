@@ -1,20 +1,20 @@
-# DingDong — versão pessoal
+# DingDong — multi-empresa
 
-Rastreamento de conversões do WhatsApp ligadas a cliques do Google Ads, para uso próprio (um usuário só, sem cobrança, sem multi-empresa).
+Rastreamento de conversões do WhatsApp ligadas a cliques do Google Ads. Um login só (seu), mas gerencia **várias empresas/clientes**, cada uma com sua própria conexão Google Ads e WhatsApp.
 
 ## O que faz
 
-1. Você instala o script `t.js` no seu site — ele captura o `gclid` do clique de anúncio e marca os links de WhatsApp da página com um código de rastreio.
-2. Quando alguém clica em "falar no WhatsApp", a mensagem chega no seu número já com esse código.
+1. Cada empresa instala o próprio script `t.js` (com o id da empresa) no site dela — ele captura o `gclid` do clique de anúncio e marca os links de WhatsApp da página com um código de rastreio.
+2. Quando alguém clica em "falar no WhatsApp", a mensagem chega no número daquela empresa já com esse código.
 3. O sistema liga a conversa ao clique original (gclid) automaticamente.
-4. Quando você marca a venda no painel, o valor é enviado como conversão offline pra sua conta do Google Ads.
+4. Uma regra de palavras-chave (configurável por empresa, sem IA) detecta quando a conversa virou venda e, se conseguir achar um valor em reais na mensagem, pode enviar a conversão pro Google Ads da empresa automaticamente — ou só sugerir, esperando sua confirmação, dependendo da configuração de cada empresa.
 
 ## Stack
 
 - Backend: Node.js + Express (um processo só, sem SSR, sem framework pesado).
 - Banco: SQLite (um arquivo, sem serviço externo).
 - Frontend: React + Vite + Tailwind, servido como arquivos estáticos pelo próprio Express.
-- Integrações: Google Ads API (OAuth próprio) e Z-API para WhatsApp.
+- Integrações: Google Ads API (app OAuth próprio, uma conexão por empresa) e D-API para WhatsApp (uma sessão por empresa).
 
 ## Rodando localmente
 
@@ -36,8 +36,8 @@ Veja [`DEPLOY.md`](./DEPLOY.md) — passo a passo pra VPS da Hostinger (Ubuntu +
 ## Estrutura
 
 ```
-server/       # Express: rotas, auth, integrações (Google Ads, WhatsApp)
-public/t.js   # script de rastreio (pixel) servido em /t.js
-web/          # frontend React (Vite)
+server/       # Express: rotas, auth, integrações (Google Ads, WhatsApp), detecção de venda
+public/t.js   # script de rastreio (pixel) servido em /t.js, identifica a empresa via data-empresa
+web/          # frontend React (Vite) — Empresas, Dashboard, Conversas, Google Ads, WhatsApp, Regras de Venda
 data/         # banco SQLite (criado automaticamente, não versionado)
 ```

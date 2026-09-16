@@ -15,28 +15,51 @@ export const api = {
   logout: () => chamar("/api/auth/logout", { method: "POST" }),
   eu: () => chamar("/api/auth/me"),
 
-  dashboard: () => chamar("/api/dashboard/resumo"),
+  // ---- Empresas ----
+  empresas: () => chamar("/api/empresas"),
+  criarEmpresa: (nome) => chamar("/api/empresas", { method: "POST", body: { nome } }),
+  empresa: (empresaId) => chamar(`/api/empresas/${empresaId}`),
+  apagarEmpresa: (empresaId) => chamar(`/api/empresas/${empresaId}`, { method: "DELETE" }),
+  salvarRegrasVenda: (empresaId, palavrasChave, confirmarAntesDeEnviar) =>
+    chamar(`/api/empresas/${empresaId}/regras-venda`, {
+      method: "PUT",
+      body: { palavrasChave, confirmarAntesDeEnviar },
+    }),
 
-  googleStatus: () => chamar("/api/google/status"),
-  googleAuthUrl: () => chamar("/api/google/auth-url"),
-  googleDesconectar: () => chamar("/api/google/desconectar", { method: "POST" }),
-  googleContas: () => chamar("/api/google/contas"),
-  googleSubcontas: (mccId) => chamar(`/api/google/contas/${mccId}/subcontas`),
-  googleEscolherConta: (customerId, nome, loginCustomerId) =>
-    chamar("/api/google/contas/escolher", { method: "POST", body: { customerId, nome, loginCustomerId } }),
-  googleCampanhas: () => chamar("/api/google/campanhas"),
+  dashboard: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/resumo`),
 
-  whatsappStatus: () => chamar("/api/whatsapp/status"),
-  whatsappQr: () => chamar("/api/whatsapp/conectar/qr", { method: "POST" }),
-  whatsappCodigo: (telefone) => chamar("/api/whatsapp/conectar/codigo", { method: "POST", body: { telefone } }),
-  whatsappDesconectar: () => chamar("/api/whatsapp/desconectar", { method: "POST" }),
-  whatsappCredenciais: () => chamar("/api/whatsapp/credenciais"),
-  whatsappSalvarCredenciais: (sessionId, apiKey) =>
-    chamar("/api/whatsapp/credenciais", { method: "POST", body: { sessionId, apiKey } }),
-  whatsappRemoverCredenciais: () => chamar("/api/whatsapp/credenciais/remover", { method: "POST" }),
+  // ---- Google Ads ----
+  googleStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/google/status`),
+  googleAuthUrl: (empresaId) => chamar(`/api/empresas/${empresaId}/google/auth-url`),
+  googleDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/google/desconectar`, { method: "POST" }),
+  googleContas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas`),
+  googleSubcontas: (empresaId, mccId) => chamar(`/api/empresas/${empresaId}/google/contas/${mccId}/subcontas`),
+  googleEscolherConta: (empresaId, customerId, nome, loginCustomerId) =>
+    chamar(`/api/empresas/${empresaId}/google/contas/escolher`, {
+      method: "POST",
+      body: { customerId, nome, loginCustomerId },
+    }),
+  googleCampanhas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/campanhas`),
 
-  conversas: () => chamar("/api/conversas"),
-  conversa: (id) => chamar(`/api/conversas/${id}/mensagens`),
-  enviarMensagem: (id, texto) => chamar(`/api/conversas/${id}/mensagens`, { method: "POST", body: { texto } }),
-  marcarVenda: (id, valor) => chamar(`/api/conversas/${id}/venda`, { method: "POST", body: { valor } }),
+  // ---- WhatsApp ----
+  whatsappStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/status`),
+  whatsappQr: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/conectar/qr`, { method: "POST" }),
+  whatsappCodigo: (empresaId, telefone) =>
+    chamar(`/api/empresas/${empresaId}/whatsapp/conectar/codigo`, { method: "POST", body: { telefone } }),
+  whatsappDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/desconectar`, { method: "POST" }),
+  whatsappCredenciais: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/credenciais`),
+  whatsappSalvarCredenciais: (empresaId, sessionId, apiKey) =>
+    chamar(`/api/empresas/${empresaId}/whatsapp/credenciais`, { method: "POST", body: { sessionId, apiKey } }),
+  whatsappRemoverCredenciais: (empresaId) =>
+    chamar(`/api/empresas/${empresaId}/whatsapp/credenciais/remover`, { method: "POST" }),
+
+  // ---- Conversas ----
+  conversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`),
+  conversa: (empresaId, id) => chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`),
+  enviarMensagem: (empresaId, id, texto) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`, { method: "POST", body: { texto } }),
+  marcarVenda: (empresaId, id, valor) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/venda`, { method: "POST", body: { valor } }),
+  descartarVenda: (empresaId, id) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/descartar-venda`, { method: "POST" }),
 };
