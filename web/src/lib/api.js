@@ -62,4 +62,11 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/conversas/${id}/venda`, { method: "POST", body: { valor } }),
   descartarVenda: (empresaId, id) =>
     chamar(`/api/empresas/${empresaId}/conversas/${id}/descartar-venda`, { method: "POST" }),
+
+  // ---- Bloqueio de IP ----
+  visitasIp: (empresaId) => chamar(`/api/empresas/${empresaId}/ip-bloqueio`),
+  bloquearIp: (empresaId, ip) =>
+    chamar(`/api/empresas/${empresaId}/ip-bloqueio/bloquear`, { method: "POST", body: { ip } }),
+  desbloquearIp: (empresaId, ip) =>
+    chamar(`/api/empresas/${empresaId}/ip-bloqueio/desbloquear`, { method: "POST", body: { ip } }),
 };

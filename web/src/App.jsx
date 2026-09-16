@@ -10,6 +10,7 @@ import WhatsApp from "./pages/WhatsApp.jsx";
 import Tracking from "./pages/Tracking.jsx";
 import Conversas from "./pages/Conversas.jsx";
 import RegrasVenda from "./pages/RegrasVenda.jsx";
+import BloqueioIp from "./pages/BloqueioIp.jsx";
 
 export default function App() {
   const [autenticado, setAutenticado] = useState(null); // null = carregando
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="empresas/:empresaId/whatsapp" element={<WhatsApp />} />
         <Route path="empresas/:empresaId/tracking" element={<Tracking />} />
         <Route path="empresas/:empresaId/regras-venda" element={<RegrasVenda />} />
+        <Route path="empresas/:empresaId/bloqueio-ip" element={<BloqueioIp />} />
       </Route>
       <Route path="*" element={<Navigate to={autenticado ? "/app" : "/login"} replace />} />
     </Routes>

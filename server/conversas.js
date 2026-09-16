@@ -1,4 +1,4 @@
-import { db } from "./db.js";
+import { db, ipEstaBloqueado } from "./db.js";
 import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
 import { enviarConversaoGoogle } from "./googleAds.js";
@@ -29,8 +29,8 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
     const clique = buscarCliquePorCodigo(codigo);
     if (clique) {
       db.prepare(
-        "UPDATE conversas SET gclid = ?, fbclid = ?, origem = ?, atualizado_em = datetime('now') WHERE id = ?",
-      ).run(clique.gclid, clique.fbclid, clique.origem, conversa.id);
+        "UPDATE conversas SET gclid = ?, fbclid = ?, origem = ?, ip = ?, atualizado_em = datetime('now') WHERE id = ?",
+      ).run(clique.gclid, clique.fbclid, clique.origem, clique.ip, conversa.id);
     }
   }
 
@@ -77,7 +77,9 @@ export function listarMensagens(conversaId) {
 export async function confirmarVenda(empresa, conversa, valor) {
   let conversaoEnviada = false;
   let respostaConversao = null;
-  if (conversa.gclid) {
+  if (conversa.ip && ipEstaBloqueado(empresa.id, conversa.ip)) {
+    respostaConversao = `Venda marcada, mas a conversão NÃO foi enviada: o IP ${conversa.ip} está bloqueado.`;
+  } else if (conversa.gclid) {
     const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor, moeda: empresa.moeda });
     conversaoEnviada = r.ok;
     respostaConversao = r.ok ? "Conversão enviada ao Google Ads." : r.erro;

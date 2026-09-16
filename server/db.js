@@ -52,10 +52,13 @@ function criarSchema() {
     fbclid TEXT,
     origem TEXT NOT NULL DEFAULT 'sem_rastreio',
     url_origem TEXT,
+    ip TEXT,
+    duracao_segundos INTEGER,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_clicks_codigo ON clicks(codigo);
   CREATE INDEX IF NOT EXISTS idx_clicks_empresa ON clicks(empresa_id);
+  CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);
 
   CREATE TABLE IF NOT EXISTS conversas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,6 +67,7 @@ function criarSchema() {
     nome TEXT,
     gclid TEXT,
     fbclid TEXT,
+    ip TEXT,
     origem TEXT NOT NULL DEFAULT 'sem_rastreio',
     status TEXT NOT NULL DEFAULT 'lead',
     valor_sugerido REAL,
@@ -74,6 +78,14 @@ function criarSchema() {
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_conversas_empresa_telefone ON conversas(empresa_id, telefone);
+
+  CREATE TABLE IF NOT EXISTS ips_bloqueados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_bloqueados_empresa_ip ON ips_bloqueados(empresa_id, ip);
 
   CREATE TABLE IF NOT EXISTS mensagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,11 +163,26 @@ function migrarParaMultiEmpresa() {
   }
 }
 
+function adicionarColuna(tabela, coluna, definicao) {
+  if (!colunaExiste(tabela, coluna)) {
+    db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`);
+  }
+}
+
+/** Colunas novas adicionadas depois que as tabelas já existiam em produção. */
+function migrarColunasNovas() {
+  if (!tabelaExiste("clicks") || !tabelaExiste("conversas")) return;
+  adicionarColuna("clicks", "ip", "TEXT");
+  adicionarColuna("clicks", "duracao_segundos", "INTEGER");
+  adicionarColuna("conversas", "ip", "TEXT");
+}
+
 // A migração precisa rodar ANTES do criarSchema() definitivo: se o banco
 // ainda estiver no formato antigo, criar o índice novo (empresa_id) em cima
 // da tabela `conversas` antiga (sem essa coluna) quebraria com SQLITE_ERROR.
 migrarParaMultiEmpresa();
 criarSchema();
+migrarColunasNovas();
 
 /* ------------------------------------------------------------- empresas */
 
@@ -204,6 +231,43 @@ export function atualizarRegrasVenda(empresaId, { palavrasChave, confirmarAntesD
 
 export function apagarEmpresa(id) {
   db.prepare("DELETE FROM empresas WHERE id = ?").run(id);
+}
+
+/* ----------------------------------------------------------- bloqueio de IP */
+
+export function bloquearIp(empresaId, ip) {
+  db.prepare("INSERT OR IGNORE INTO ips_bloqueados (empresa_id, ip) VALUES (?, ?)").run(empresaId, ip);
+}
+
+export function desbloquearIp(empresaId, ip) {
+  db.prepare("DELETE FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").run(empresaId, ip);
+}
+
+export function listarIpsBloqueados(empresaId) {
+  return db.prepare("SELECT * FROM ips_bloqueados WHERE empresa_id = ? ORDER BY criado_em DESC").all(empresaId);
+}
+
+export function ipEstaBloqueado(empresaId, ip) {
+  if (!ip) return false;
+  return Boolean(db.prepare("SELECT 1 FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").get(empresaId, ip));
+}
+
+/** Visitas agrupadas por IP (mais recentes primeiro), pra tela de Bloqueio de IP. */
+export function listarVisitasPorIp(empresaId) {
+  return db
+    .prepare(
+      `SELECT ip,
+              COUNT(*) AS visitas,
+              MAX(criado_em) AS ultima_visita,
+              MAX(duracao_segundos) AS duracao_segundos,
+              MAX(CASE WHEN origem != 'sem_rastreio' THEN 1 ELSE 0 END) AS veioDeAnuncio
+       FROM clicks
+       WHERE empresa_id = ? AND ip IS NOT NULL AND ip != ''
+       GROUP BY ip
+       ORDER BY ultima_visita DESC
+       LIMIT 200`,
+    )
+    .all(empresaId);
 }
 
 /* -------------------------------------------------------- config global */

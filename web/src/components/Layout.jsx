@@ -43,6 +43,7 @@ export default function Layout({ aoSair }) {
         { to: `/app/empresas/${empresaId}/whatsapp`, label: "WhatsApp" },
         { to: `/app/empresas/${empresaId}/tracking`, label: "Instalar Rastreio" },
         { to: `/app/empresas/${empresaId}/regras-venda`, label: "Regras de Venda" },
+        { to: `/app/empresas/${empresaId}/bloqueio-ip`, label: "Bloqueio de IP" },
       ]
     : [];
 

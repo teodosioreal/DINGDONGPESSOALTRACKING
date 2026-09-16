@@ -52,6 +52,26 @@
       keepalive: true,
     }).catch(function () {});
 
+    // Tempo de permanência: manda quando a pessoa sai/troca de aba (sendBeacon
+    // funciona mesmo com a página fechando, ao contrário de um fetch normal).
+    var inicio = Date.now();
+    var enviado = false;
+    function enviarDuracao() {
+      if (enviado) return;
+      enviado = true;
+      var duracao = Math.round((Date.now() - inicio) / 1000);
+      var payload = JSON.stringify({ empresa: empresaId, codigo: codigo, duracao: duracao });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(origem + "/api/public/click/duracao", new Blob([payload], { type: "application/json" }));
+      } else {
+        fetch(origem + "/api/public/click/duracao", { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, keepalive: true }).catch(function () {});
+      }
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") enviarDuracao();
+    });
+    window.addEventListener("pagehide", enviarDuracao);
+
     function marcarLink(a) {
       if (a.getAttribute("data-dingdong-marcado")) return;
       try {
