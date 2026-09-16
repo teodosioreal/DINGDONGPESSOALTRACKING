@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { limitar } from "../rateLimit.js";
 import {
   statusConexao,
   gerarQrCode,
@@ -73,6 +74,13 @@ export const whatsappWebhookRouter = Router();
 whatsappWebhookRouter.post("/webhook", async (req, res) => {
   const empresa = empresaDoWebhook(req);
   if (!empresa) return res.status(401).send("empresa ou chave inválida");
+
+  // Limite por EMPRESA (não por IP): a D-API pode mandar de IPs compartilhados
+  // entre várias contas, então limitar por IP arriscaria bloquear webhooks
+  // legítimos de outros clientes dela.
+  if (!limitar(`webhook-whatsapp:${empresa.id}`, { max: 120, janelaMs: 60_000 })) {
+    return res.status(429).send("muitas requisições");
+  }
 
   const { telefone, texto, deMim, grupo, nome } = normalizarPayloadInbound(req.body);
   if (!telefone || deMim || grupo) return res.send("ignorado");

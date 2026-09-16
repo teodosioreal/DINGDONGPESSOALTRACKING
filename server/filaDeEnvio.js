@@ -42,14 +42,19 @@ export function formatarHorarioBrasilia(isoOuData) {
   return `${String(horaBrasilia).padStart(2, "0")}h`;
 }
 
-async function enviarVenda(conversa) {
+/**
+ * Envia uma venda da fila pro Google Ads e registra o resultado — usado
+ * tanto pelo agendador (08h/20h) quanto pelo botão "Enviar agora".
+ */
+export async function enviarVendaParaGoogleAds(conversa) {
   const empresa = buscarEmpresa(conversa.empresa_id);
-  if (!empresa) return;
+  if (!empresa) return { ok: false, erro: "Empresa não encontrada." };
   const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor: conversa.valor, moeda: empresa.moeda });
   marcarEnvioResultado(conversa.id, {
     enviada: r.ok,
     resposta: r.ok ? "Conversão enviada ao Google Ads." : r.erro,
   });
+  return r.ok ? { ok: true } : { ok: false, erro: r.erro };
 }
 
 /** Processa tudo que já está no horário de ser enviado, de qualquer empresa. */
@@ -57,7 +62,7 @@ export async function processarFilaDeEnvio() {
   const pendentes = listarFilaDeEnvioDevida();
   for (const conversa of pendentes) {
     try {
-      await enviarVenda(conversa);
+      await enviarVendaParaGoogleAds(conversa);
     } catch (e) {
       console.error(`[fila-envio] Falha ao processar conversa ${conversa.id}`, e);
     }

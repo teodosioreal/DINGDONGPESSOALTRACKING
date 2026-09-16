@@ -28,6 +28,7 @@ export default function Layout({ aoSair }) {
   const { empresaId } = useParams();
   const [empresa, setEmpresa] = useState(null);
   const [escuro, setEscuro] = useState(temaSalvo);
+  const [naoLidas, setNaoLidas] = useState(0);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", escuro);
@@ -49,6 +50,28 @@ export default function Layout({ aoSair }) {
       .catch(() => setEmpresa(null));
   }, [empresaId]);
 
+  useEffect(() => {
+    if (!empresaId) {
+      setNaoLidas(0);
+      return;
+    }
+    let cancelado = false;
+    function carregar() {
+      api
+        .conversasNaoLidas(empresaId)
+        .then((r) => {
+          if (!cancelado) setNaoLidas(r.total);
+        })
+        .catch(() => {});
+    }
+    carregar();
+    const t = setInterval(carregar, 15000);
+    return () => {
+      cancelado = true;
+      clearInterval(t);
+    };
+  }, [empresaId]);
+
   async function sair() {
     await api.logout().catch(() => {});
     aoSair();
@@ -58,7 +81,7 @@ export default function Layout({ aoSair }) {
   const itensEmpresa = empresaId
     ? [
         { to: `/app/empresas/${empresaId}`, label: "Painel", fim: true },
-        { to: `/app/empresas/${empresaId}/conversas`, label: "Conversas" },
+        { to: `/app/empresas/${empresaId}/conversas`, label: "Conversas", badge: naoLidas },
         { to: `/app/empresas/${empresaId}/google-ads`, label: "Google Ads" },
         { to: `/app/empresas/${empresaId}/whatsapp`, label: "WhatsApp" },
         { to: `/app/empresas/${empresaId}/tracking`, label: "Instalar Rastreio" },
@@ -106,20 +129,37 @@ export default function Layout({ aoSair }) {
                   to={item.to}
                   end={item.fim}
                   className={({ isActive }) =>
-                    `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    `flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
                         : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                     }`
                   }
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.badge > 0 && (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-semibold text-white">
+                      {item.badge}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </>
           )}
         </nav>
         <div className="space-y-2 p-3">
+          <NavLink
+            to="/app/conta"
+            className={({ isActive }) =>
+              `block rounded-md px-3 py-2 text-left text-sm font-medium ${
+                isActive
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              }`
+            }
+          >
+            Minha conta
+          </NavLink>
           <button
             onClick={sair}
             className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"

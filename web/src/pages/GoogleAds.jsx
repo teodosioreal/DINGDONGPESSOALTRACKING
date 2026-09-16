@@ -137,14 +137,20 @@ export default function GoogleAds() {
         </div>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
-          <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
-            Conecte sua conta do Google Ads para enviar conversões offline.
-          </p>
+          {status?.erro ? (
+            <p className="mb-4 text-sm text-red-600 dark:text-red-400">
+              A conexão quebrou: {status.erro} Reconecte pra continuar enviando conversões.
+            </p>
+          ) : (
+            <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+              Conecte sua conta do Google Ads para enviar conversões offline.
+            </p>
+          )}
           <button
             onClick={conectar}
             className="rounded-md bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
           >
-            Conectar conta do Google
+            {status?.erro ? "Reconectar conta do Google" : "Conectar conta do Google"}
           </button>
         </div>
       )}

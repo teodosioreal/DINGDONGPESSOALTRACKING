@@ -168,6 +168,22 @@ export function conexaoSalva(empresaId) {
   };
 }
 
+/**
+ * Como conexaoSalva(), mas confirma de verdade que o token ainda funciona
+ * (tenta renovar o access token) em vez de só olhar se tem refresh_token
+ * salvo no banco — assim a tela avisa se a conexão quebrou (token revogado
+ * pelo usuário no Google, por exemplo) em vez de mostrar "conectado" à toa.
+ */
+export async function statusConexaoReal(empresaId) {
+  const conexao = conexaoSalva(empresaId);
+  if (!conexao.refreshToken) return { ...conexao, conectado: false };
+  const c = lerCredenciaisApp();
+  if (c.erro) return { ...conexao, conectado: false, erro: c.erro };
+  const auth = await obterAccessToken(conexao.refreshToken);
+  if (!auth.token) return { ...conexao, conectado: false, erro: auth.erro };
+  return { ...conexao, conectado: true };
+}
+
 export function salvarConexao(empresaId, { refreshToken, email }) {
   db.prepare(
     `INSERT INTO google_conexoes (empresa_id, refresh_token, email) VALUES (?, ?, ?)

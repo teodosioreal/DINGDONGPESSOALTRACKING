@@ -11,6 +11,7 @@ import Tracking from "./pages/Tracking.jsx";
 import Conversas from "./pages/Conversas.jsx";
 import RegrasVenda from "./pages/RegrasVenda.jsx";
 import BloqueioIp from "./pages/BloqueioIp.jsx";
+import Conta from "./pages/Conta.jsx";
 
 export default function App() {
   const [autenticado, setAutenticado] = useState(null); // null = carregando
@@ -40,6 +41,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="empresas" replace />} />
         <Route path="empresas" element={<Empresas />} />
+        <Route path="conta" element={<Conta />} />
         <Route path="empresas/:empresaId" element={<Dashboard />} />
         <Route path="empresas/:empresaId/conversas" element={<Conversas />} />
         <Route path="empresas/:empresaId/google-ads" element={<GoogleAds />} />

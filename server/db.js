@@ -77,6 +77,8 @@ function criarSchema() {
     conversao_resposta TEXT,
     fila_status TEXT,
     envio_agendado_para TEXT,
+    fila_tentativas INTEGER NOT NULL DEFAULT 0,
+    nao_lida INTEGER NOT NULL DEFAULT 0,
     criado_em TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -188,6 +190,8 @@ function migrarColunasNovas() {
   adicionarColuna("conversas", "campanha", "TEXT");
   adicionarColuna("conversas", "fila_status", "TEXT");
   adicionarColuna("conversas", "envio_agendado_para", "TEXT");
+  adicionarColuna("conversas", "fila_tentativas", "INTEGER NOT NULL DEFAULT 0");
+  adicionarColuna("conversas", "nao_lida", "INTEGER NOT NULL DEFAULT 0");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
 }
@@ -216,8 +220,10 @@ export function listarEmpresas() {
   return db
     .prepare(
       `SELECT e.*,
-              (g.refresh_token IS NOT NULL) AS googleConectado,
-              (w.session_id IS NOT NULL AND w.api_key IS NOT NULL) AS whatsappConfigurado
+              (g.refresh_token IS NOT NULL AND g.customer_id IS NOT NULL) AS googleConectado,
+              (w.session_id IS NOT NULL AND w.api_key IS NOT NULL) AS whatsappConfigurado,
+              (e.palavras_chave IS NOT NULL AND TRIM(e.palavras_chave) != '') AS regrasConfiguradas,
+              EXISTS(SELECT 1 FROM clicks c WHERE c.empresa_id = e.id) AS pixelInstalado
        FROM empresas e
        LEFT JOIN google_conexoes g ON g.empresa_id = e.id
        LEFT JOIN whatsapp_conexoes w ON w.empresa_id = e.id
@@ -306,7 +312,9 @@ export function listarFilaDeEnvioDevida() {
 /** Registra o resultado de uma tentativa de envio. Falha mantém "pendente" pra tentar de novo depois. */
 export function marcarEnvioResultado(conversaId, { enviada, resposta }) {
   db.prepare(
-    `UPDATE conversas SET fila_status = ?, conversao_enviada = ?, conversao_resposta = ?, atualizado_em = datetime('now') WHERE id = ?`,
+    `UPDATE conversas
+     SET fila_status = ?, conversao_enviada = ?, conversao_resposta = ?, fila_tentativas = fila_tentativas + 1, atualizado_em = datetime('now')
+     WHERE id = ?`,
   ).run(enviada ? "enviado" : "pendente", enviada ? 1 : 0, resposta, conversaId);
 }
 
@@ -314,6 +322,30 @@ export function cancelarEnvioNaFila(conversaId) {
   db.prepare(
     `UPDATE conversas SET fila_status = 'cancelado', conversao_resposta = 'Envio cancelado manualmente.', atualizado_em = datetime('now') WHERE id = ?`,
   ).run(conversaId);
+}
+
+/* ------------------------------------------------------------ conversas */
+
+export function marcarConversaLida(conversaId) {
+  db.prepare("UPDATE conversas SET nao_lida = 0 WHERE id = ?").run(conversaId);
+}
+
+export function contarConversasNaoLidas(empresaId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM conversas WHERE empresa_id = ? AND nao_lida = 1").get(empresaId).n;
+}
+
+/** Resumo de quanto do setup da empresa já está pronto — pra tela Painel. */
+export function checklistSetup(empresaId) {
+  const empresa = db.prepare("SELECT palavras_chave FROM empresas WHERE id = ?").get(empresaId);
+  const google = db.prepare("SELECT refresh_token, customer_id FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
+  const whatsapp = db.prepare("SELECT session_id, api_key FROM whatsapp_conexoes WHERE empresa_id = ?").get(empresaId);
+  const ultimoClique = db.prepare("SELECT MAX(criado_em) AS quando FROM clicks WHERE empresa_id = ?").get(empresaId);
+  return {
+    googleConectado: Boolean(google?.refresh_token && google?.customer_id),
+    whatsappConfigurado: Boolean(whatsapp?.session_id && whatsapp?.api_key),
+    regrasConfiguradas: Boolean(empresa?.palavras_chave?.trim()),
+    ultimoCliqueEm: ultimoClique?.quando ?? null,
+  };
 }
 
 /* -------------------------------------------------------- config global */

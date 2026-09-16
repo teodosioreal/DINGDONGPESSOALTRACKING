@@ -4,7 +4,7 @@ import {
   lerEstado,
   trocarCodigoPorToken,
   emailDoAccessToken,
-  conexaoSalva,
+  statusConexaoReal,
   salvarConexao,
   salvarContaEscolhida,
   desconectarGoogle,
@@ -15,13 +15,14 @@ import {
 
 export const googleRouter = Router({ mergeParams: true });
 
-googleRouter.get("/status", (req, res) => {
-  const c = conexaoSalva(req.empresaId);
+googleRouter.get("/status", async (req, res) => {
+  const c = await statusConexaoReal(req.empresaId);
   res.json({
-    conectado: Boolean(c.refreshToken),
+    conectado: c.conectado,
     email: c.email,
     customerId: c.customerId,
     customerNome: c.customerNome,
+    erro: c.erro ?? null,
   });
 });
 

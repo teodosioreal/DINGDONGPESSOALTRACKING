@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 const NOME_ORIGEM = { google: "Google Ads", meta: "Meta Ads", sem_rastreio: "Sem rastreio" };
@@ -8,6 +8,7 @@ export default function Dashboard() {
   const { empresaId } = useParams();
   const [resumo, setResumo] = useState(null);
   const [fila, setFila] = useState([]);
+  const [checklist, setChecklist] = useState(null);
   const [processando, setProcessando] = useState("");
   const [erro, setErro] = useState("");
   const [erroFila, setErroFila] = useState("");
@@ -15,10 +16,15 @@ export default function Dashboard() {
   useEffect(() => {
     setResumo(null);
     setFila([]);
+    setChecklist(null);
     api
       .dashboard(empresaId)
       .then(setResumo)
       .catch((e) => setErro(e.message));
+    api
+      .checklist(empresaId)
+      .then(setChecklist)
+      .catch(() => {});
     carregarFila();
     const t = setInterval(carregarFila, 30000);
     return () => clearInterval(t);
@@ -68,10 +74,12 @@ export default function Dashboard() {
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold tracking-tight">Painel</h1>
 
+      {checklist && <ChecklistSetup empresaId={empresaId} checklist={checklist} />}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card titulo="Leads hoje" valor={resumo.leadsHoje} />
         <Card titulo="Total de vendas" valor={resumo.totalVendas} />
-        <Card titulo="Receita gerada" valor={formatarMoeda(resumo.receita)} />
+        <Card titulo="Receita gerada" valor={formatarMoeda(resumo.receita, resumo.moeda)} />
       </div>
 
       {resumo.vendasProvaveisPendentes > 0 && (
@@ -111,8 +119,15 @@ export default function Dashboard() {
               <tbody>
                 {fila.map((v) => (
                   <tr key={v.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-4 py-2">{v.nome || v.telefone}</td>
-                    <td className="px-4 py-2">{formatarMoeda(v.valor)}</td>
+                    <td className="px-4 py-2">
+                      {v.nome || v.telefone}
+                      {v.ultimoErro && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          Última tentativa falhou: {v.ultimoErro}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">{formatarMoeda(v.valor, resumo.moeda)}</td>
                     <td className="px-4 py-2">{v.campanha || "Indefinido"}</td>
                     <td className="px-4 py-2 text-slate-500 dark:text-slate-400">
                       {formatarAgendamento(v.envioAgendadoPara)}
@@ -161,7 +176,7 @@ export default function Dashboard() {
                   <td className="px-4 py-2">{NOME_ORIGEM[linha.origem] ?? linha.origem}</td>
                   <td className="px-4 py-2">{linha.leads}</td>
                   <td className="px-4 py-2">{linha.vendas}</td>
-                  <td className="px-4 py-2">{formatarMoeda(linha.receita)}</td>
+                  <td className="px-4 py-2">{formatarMoeda(linha.receita, resumo.moeda)}</td>
                 </tr>
               ))}
             </tbody>
@@ -181,8 +196,72 @@ function Card({ titulo, valor }) {
   );
 }
 
-function formatarMoeda(v) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v) || 0);
+function formatarMoeda(v, moeda) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(Number(v) || 0);
+}
+
+function formatarTempoRelativo(isoUtc) {
+  const diffMs = Date.now() - new Date(isoUtc).getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return "agora mesmo";
+  if (min < 60) return `há ${min} min`;
+  const horas = Math.round(min / 60);
+  if (horas < 24) return `há ${horas}h`;
+  return `há ${Math.round(horas / 24)} dia(s)`;
+}
+
+function ChecklistSetup({ empresaId, checklist }) {
+  const itens = [
+    {
+      ok: checklist.googleConectado,
+      label: "Google Ads conectado",
+      link: `/app/empresas/${empresaId}/google-ads`,
+    },
+    {
+      ok: checklist.whatsappConfigurado,
+      label: "WhatsApp configurado",
+      link: `/app/empresas/${empresaId}/whatsapp`,
+    },
+    {
+      ok: checklist.regrasConfiguradas,
+      label: "Regras de venda configuradas",
+      link: `/app/empresas/${empresaId}/regras-venda`,
+    },
+    {
+      ok: Boolean(checklist.ultimoCliqueEm),
+      label: checklist.ultimoCliqueEm
+        ? `Script instalado (último clique ${formatarTempoRelativo(checklist.ultimoCliqueEm)})`
+        : "Script de rastreio ainda não recebeu nenhum clique",
+      link: `/app/empresas/${empresaId}/tracking`,
+    },
+  ];
+
+  const faltando = itens.filter((i) => !i.ok);
+  if (faltando.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
+      <p className="mb-2 text-sm font-medium text-amber-900 dark:text-amber-300">
+        Falta configurar {faltando.length === 1 ? "isso" : "essas coisas"} nessa empresa:
+      </p>
+      <ul className="space-y-1">
+        {itens.map((item) => (
+          <li key={item.label} className="text-sm">
+            <Link
+              to={item.link}
+              className={
+                item.ok
+                  ? "text-slate-500 line-through dark:text-slate-500"
+                  : "font-medium text-amber-900 hover:underline dark:text-amber-300"
+              }
+            >
+              {item.ok ? "✅" : "⬜"} {item.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function formatarAgendamento(isoUtc) {

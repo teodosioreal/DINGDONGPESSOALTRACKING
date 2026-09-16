@@ -96,25 +96,11 @@ export default function Empresas() {
             </button>
             <Link to={`/app/empresas/${emp.id}`} className="block pr-14">
               <p className="font-medium">{emp.nome}</p>
-              <div className="mt-3 flex gap-2 text-xs">
-                <span
-                  className={`rounded-full px-2 py-1 font-medium ${
-                    emp.googleConectado
-                      ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
-                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                  }`}
-                >
-                  Google Ads {emp.googleConectado ? "conectado" : "pendente"}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-1 font-medium ${
-                    emp.whatsappConfigurado
-                      ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
-                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                  }`}
-                >
-                  WhatsApp {emp.whatsappConfigurado ? "configurado" : "pendente"}
-                </span>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <Badge ok={emp.googleConectado} rotuloOk="Google Ads conectado" rotuloPendente="Google Ads pendente" />
+                <Badge ok={emp.whatsappConfigurado} rotuloOk="WhatsApp configurado" rotuloPendente="WhatsApp pendente" />
+                <Badge ok={emp.regrasConfiguradas} rotuloOk="Regras de venda ok" rotuloPendente="Sem regras de venda" />
+                <Badge ok={emp.pixelInstalado} rotuloOk="Pixel instalado" rotuloPendente="Pixel não instalado" />
               </div>
             </Link>
           </div>
@@ -127,5 +113,19 @@ export default function Empresas() {
         </p>
       )}
     </div>
+  );
+}
+
+function Badge({ ok, rotuloOk, rotuloPendente }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-1 font-medium ${
+        ok
+          ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+      }`}
+    >
+      {ok ? rotuloOk : rotuloPendente}
+    </span>
   );
 }

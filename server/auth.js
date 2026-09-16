@@ -1,4 +1,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { getConfig, setConfig } from "./db.js";
+
+const CONFIG_CHAVE_SENHA = "admin_password_hash";
 
 const SESSION_COOKIE = "dingdong_sessao";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
@@ -25,12 +28,29 @@ function senhaConfere(senha, hashSalvo) {
   return calculado.length === esperado.length && timingSafeEqual(calculado, esperado);
 }
 
+/** Hash em uso: o trocado pelo usuário (salvo no banco) tem prioridade sobre o do .env. */
+function hashAtual() {
+  return getConfig(CONFIG_CHAVE_SENHA) || process.env.ADMIN_PASSWORD_HASH || "";
+}
+
 export function credenciaisValidas(usuario, senha) {
   const usuarioEsperado = process.env.ADMIN_USER ?? "";
-  const hashEsperado = process.env.ADMIN_PASSWORD_HASH ?? "";
+  const hashEsperado = hashAtual();
   if (!usuarioEsperado || !hashEsperado) return false;
   if (usuario !== usuarioEsperado) return false;
   return senhaConfere(senha, hashEsperado);
+}
+
+/** Troca a senha do admin, validando a senha atual antes. Salva o novo hash no banco. */
+export function trocarSenha(senhaAtual, novaSenha) {
+  if (!senhaConfere(senhaAtual, hashAtual())) {
+    return { ok: false, erro: "Senha atual incorreta." };
+  }
+  if (!novaSenha || novaSenha.length < 8) {
+    return { ok: false, erro: "A nova senha precisa ter pelo menos 8 caracteres." };
+  }
+  setConfig(CONFIG_CHAVE_SENHA, gerarHashSenha(novaSenha));
+  return { ok: true };
 }
 
 function assinar(valor) {

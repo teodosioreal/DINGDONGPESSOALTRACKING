@@ -32,6 +32,9 @@ export default function Conversas() {
     setValorVenda(conversa.valor_sugerido ? String(conversa.valor_sugerido) : "");
     const r = await api.conversa(empresaId, conversa.id);
     setMensagens(r.mensagens);
+    if (conversa.nao_lida) {
+      setConversas((atual) => atual.map((c) => (c.id === conversa.id ? { ...c, nao_lida: 0 } : c)));
+    }
   }
 
   async function enviar(e) {
@@ -75,7 +78,10 @@ export default function Conversas() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="font-medium">{c.nome || c.telefone}</span>
+              <span className="flex items-center gap-1.5 font-medium">
+                {Boolean(c.nao_lida) && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                {c.nome || c.telefone}
+              </span>
               {c.status === "vendido" && (
                 <span className="text-xs font-semibold text-green-600 dark:text-green-400">VENDIDO</span>
               )}

@@ -14,6 +14,8 @@ export const api = {
   login: (usuario, senha) => chamar("/api/auth/login", { method: "POST", body: { usuario, senha } }),
   logout: () => chamar("/api/auth/logout", { method: "POST" }),
   eu: () => chamar("/api/auth/me"),
+  trocarSenha: (senhaAtual, novaSenha) =>
+    chamar("/api/auth/trocar-senha", { method: "POST", body: { senhaAtual, novaSenha } }),
 
   // ---- Empresas ----
   empresas: () => chamar("/api/empresas"),
@@ -27,6 +29,7 @@ export const api = {
     }),
 
   dashboard: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/resumo`),
+  checklist: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/checklist`),
   filaEnvio: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/fila-envio`),
   enviarVendaAgora: (empresaId, id) =>
     chamar(`/api/empresas/${empresaId}/dashboard/fila-envio/${id}/enviar-agora`, { method: "POST" }),
@@ -62,6 +65,7 @@ export const api = {
 
   // ---- Conversas ----
   conversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`),
+  conversasNaoLidas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas/nao-lidas`),
   conversa: (empresaId, id) => chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`),
   enviarMensagem: (empresaId, id, texto) =>
     chamar(`/api/empresas/${empresaId}/conversas/${id}/mensagens`, { method: "POST", body: { texto } }),

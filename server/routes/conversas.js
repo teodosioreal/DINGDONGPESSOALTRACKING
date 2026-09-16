@@ -12,6 +12,7 @@ import {
   cancelarEnvio,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
+import { marcarConversaLida, contarConversasNaoLidas, checklistSetup } from "../db.js";
 
 export const conversasRouter = Router({ mergeParams: true });
 
@@ -19,9 +20,14 @@ conversasRouter.get("/", (req, res) => {
   res.json({ conversas: listarConversas(req.empresaId) });
 });
 
+conversasRouter.get("/nao-lidas", (req, res) => {
+  res.json({ total: contarConversasNaoLidas(req.empresaId) });
+});
+
 conversasRouter.get("/:id/mensagens", (req, res) => {
   const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
+  marcarConversaLida(conversa.id);
   res.json({ conversa, mensagens: listarMensagens(conversa.id) });
 });
 
@@ -61,6 +67,11 @@ dashboardRouter.get("/resumo", (req, res) => {
   res.json(resumoDashboard(req.empresaId));
 });
 
+/** O que já está configurado nessa empresa (Google/WhatsApp/Regras) + último clique recebido. */
+dashboardRouter.get("/checklist", (req, res) => {
+  res.json(checklistSetup(req.empresaId));
+});
+
 /** Vendas esperando o envio automático (08h/20h) — tela "Vendas para Envio". */
 dashboardRouter.get("/fila-envio", (req, res) => {
   res.json({ fila: listarFila(req.empresaId) });
@@ -69,7 +80,7 @@ dashboardRouter.get("/fila-envio", (req, res) => {
 dashboardRouter.post("/fila-envio/:id/enviar-agora", async (req, res) => {
   const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Venda não encontrada." });
-  const r = await enviarVendaAgora(req.empresa, conversa);
+  const r = await enviarVendaAgora(conversa);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
   res.json({ ok: true });
 });

@@ -1,8 +1,7 @@
-import { db, ipEstaBloqueado, marcarEnvioResultado, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
+import { db, ipEstaBloqueado, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
 import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
-import { enviarConversaoGoogle } from "./googleAds.js";
-import { proximoHorarioEnvio, formatarHorarioBrasilia } from "./filaDeEnvio.js";
+import { proximoHorarioEnvio, formatarHorarioBrasilia, enviarVendaParaGoogleAds } from "./filaDeEnvio.js";
 
 /** Garante que existe uma conversa para o telefone (dentro da empresa) e devolve a linha. */
 function conversaDoTelefone(empresaId, telefone, nome) {
@@ -36,7 +35,7 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
   }
 
   db.prepare("INSERT INTO mensagens (conversa_id, de_mim, texto) VALUES (?, 0, ?)").run(conversa.id, texto);
-  db.prepare("UPDATE conversas SET atualizado_em = datetime('now') WHERE id = ?").run(conversa.id);
+  db.prepare("UPDATE conversas SET nao_lida = 1, atualizado_em = datetime('now') WHERE id = ?").run(conversa.id);
   conversa = db.prepare("SELECT * FROM conversas WHERE id = ?").get(conversa.id);
 
   if (conversa.status === "lead") {
@@ -114,17 +113,18 @@ export function listarFila(empresaId) {
     valor: c.valor,
     campanha: c.campanha,
     envioAgendadoPara: c.envio_agendado_para,
+    // Se já tentou pelo menos uma vez e continua pendente, foi porque falhou —
+    // conversao_resposta guarda o erro dessa última tentativa.
+    ultimoErro: c.fila_tentativas > 0 ? c.conversao_resposta : null,
   }));
 }
 
 /** Envia uma venda da fila na hora, sem esperar o horário agendado. */
-export async function enviarVendaAgora(empresa, conversa) {
+export async function enviarVendaAgora(conversa) {
   if (conversa.fila_status !== "pendente") {
     return { ok: false, erro: "Essa venda não está na fila de envio." };
   }
-  const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor: conversa.valor, moeda: empresa.moeda });
-  marcarEnvioResultado(conversa.id, { enviada: r.ok, resposta: r.ok ? "Conversão enviada ao Google Ads." : r.erro });
-  return r.ok ? { ok: true } : { ok: false, erro: r.erro };
+  return enviarVendaParaGoogleAds(conversa);
 }
 
 /** Cancela o envio de uma venda da fila — a conversão nunca é mandada pro Google Ads. */
@@ -144,6 +144,7 @@ export function descartarVendaProvavel(conversaId) {
 }
 
 export function resumoDashboard(empresaId) {
+  const empresa = db.prepare("SELECT moeda FROM empresas WHERE id = ?").get(empresaId);
   const hoje = db
     .prepare(`SELECT COUNT(*) AS leadsHoje FROM conversas WHERE empresa_id = ? AND date(criado_em) = date('now')`)
     .get(empresaId);
@@ -171,5 +172,6 @@ export function resumoDashboard(empresaId) {
     receita: vendas.receita,
     vendasProvaveisPendentes: pendentes.total,
     porOrigem,
+    moeda: empresa?.moeda ?? "BRL",
   };
 }
