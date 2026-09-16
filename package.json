@@ -1,0 +1,23 @@
+{
+  "name": "dingdong-pessoal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DingDong — rastreamento de conversoes WhatsApp -> Google Ads (versao pessoal, single-user)",
+  "scripts": {
+    "dev:server": "node --watch server/index.js",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "start": "node server/index.js",
+    "setup:admin": "node server/scripts/set-admin-password.js"
+  },
+  "workspaces": [
+    "web"
+  ],
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cookie": "^1.0.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}

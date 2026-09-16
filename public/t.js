@@ -1,0 +1,81 @@
+/**
+ * DingDong — script de rastreamento (pixel).
+ * Instale no <head> do seu site, antes de </head>:
+ *   <script src="https://SEUDOMINIO/t.js" async></script>
+ *
+ * O que ele faz:
+ *  1. Lê gclid/fbclid da URL e guarda no navegador do visitante.
+ *  2. Gera um código curto (uma vez por visitante) e o envia pro servidor.
+ *  3. Reescreve os links de WhatsApp da página pra embutir esse código na
+ *     mensagem pré-preenchida — é assim que a conversa que chega no seu
+ *     WhatsApp volta a ser ligada ao clique de anúncio original.
+ */
+(function () {
+  try {
+    var CHAVE_CODIGO = "dingdong_codigo";
+    var CHAVE_GCLID = "dingdong_gclid";
+    var CHAVE_FBCLID = "dingdong_fbclid";
+
+    function gerarCodigo() {
+      var alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      var out = "";
+      for (var i = 0; i < 8; i++) out += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+      return out;
+    }
+
+    var params = new URLSearchParams(window.location.search);
+    var gclid = params.get("gclid") || localStorage.getItem(CHAVE_GCLID) || "";
+    var fbclid = params.get("fbclid") || localStorage.getItem(CHAVE_FBCLID) || "";
+    if (params.get("gclid")) localStorage.setItem(CHAVE_GCLID, gclid);
+    if (params.get("fbclid")) localStorage.setItem(CHAVE_FBCLID, fbclid);
+
+    var codigo = localStorage.getItem(CHAVE_CODIGO);
+    if (!codigo) {
+      codigo = gerarCodigo();
+      localStorage.setItem(CHAVE_CODIGO, codigo);
+    }
+
+    var scriptAtual = document.currentScript;
+    var origem = scriptAtual ? new URL(scriptAtual.src).origin : window.location.origin;
+
+    fetch(origem + "/api/public/click", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo: codigo, gclid: gclid, fbclid: fbclid, url: window.location.href }),
+      keepalive: true,
+    }).catch(function () {});
+
+    function marcarLink(a) {
+      if (a.getAttribute("data-dingdong-marcado")) return;
+      try {
+        var url = new URL(a.href);
+        var ehWhatsApp = /wa\.me$/.test(url.hostname) || /whatsapp\.com$/.test(url.hostname);
+        if (!ehWhatsApp) return;
+        var texto = url.searchParams.get("text") || "";
+        var refTag = "(ref: " + codigo + ")";
+        if (texto.indexOf("(ref:") === -1) {
+          url.searchParams.set("text", (texto ? texto + " " : "") + refTag);
+          a.href = url.toString();
+        }
+        a.setAttribute("data-dingdong-marcado", "1");
+      } catch (e) {
+        /* link mal formado: ignora */
+      }
+    }
+
+    function marcarTodosOsLinks() {
+      var links = document.querySelectorAll('a[href*="wa.me"], a[href*="whatsapp.com"]');
+      for (var i = 0; i < links.length; i++) marcarLink(links[i]);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", marcarTodosOsLinks);
+    } else {
+      marcarTodosOsLinks();
+    }
+    // Reaplica se a página adicionar links dinamicamente (SPAs, popups etc.)
+    new MutationObserver(marcarTodosOsLinks).observe(document.documentElement, { childList: true, subtree: true });
+  } catch (e) {
+    console.error("[dingdong] falha no script de rastreio", e);
+  }
+})();
