@@ -17,6 +17,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
+            git config --global --add safe.directory /var/www/dingdong
             cd /var/www/dingdong
             git fetch origin main
             git reset --hard origin/main
