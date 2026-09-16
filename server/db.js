@@ -92,6 +92,8 @@ function criarSchema() {
     empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
     ip TEXT NOT NULL,
     motivo TEXT,
+    google_criterios TEXT,
+    google_erro TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_bloqueados_empresa_ip ON ips_bloqueados(empresa_id, ip);
@@ -200,6 +202,8 @@ function migrarColunasNovas() {
   adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("ips_bloqueados", "motivo", "TEXT");
+  adicionarColuna("ips_bloqueados", "google_criterios", "TEXT");
+  adicionarColuna("ips_bloqueados", "google_erro", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
 }
@@ -274,6 +278,20 @@ export function bloquearIp(empresaId, ip, motivo = null) {
 
 export function desbloquearIp(empresaId, ip) {
   db.prepare("DELETE FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").run(empresaId, ip);
+}
+
+export function buscarBloqueioIp(empresaId, ip) {
+  return db.prepare("SELECT * FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").get(empresaId, ip) ?? null;
+}
+
+/** Guarda o resultado (sucesso ou erro) de aplicar/remover a exclusão desse IP nas campanhas do Google Ads. */
+export function salvarResultadoGoogleDoBloqueio(empresaId, ip, { resourceNames, erro }) {
+  db.prepare("UPDATE ips_bloqueados SET google_criterios = ?, google_erro = ? WHERE empresa_id = ? AND ip = ?").run(
+    resourceNames ? JSON.stringify(resourceNames) : null,
+    erro ?? null,
+    empresaId,
+    ip,
+  );
 }
 
 export function listarIpsBloqueados(empresaId) {

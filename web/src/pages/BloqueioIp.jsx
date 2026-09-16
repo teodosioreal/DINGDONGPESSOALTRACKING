@@ -29,6 +29,7 @@ export default function BloqueioIp() {
   const [config, setConfig] = useState(null);
   const [erro, setErro] = useState("");
   const [avisoConfig, setAvisoConfig] = useState("");
+  const [avisoGoogle, setAvisoGoogle] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState("");
   const [salvandoConfig, setSalvandoConfig] = useState(false);
@@ -53,11 +54,13 @@ export default function BloqueioIp() {
   async function alternarBloqueio(ip, bloqueadoAtualmente) {
     setProcessando(ip);
     setErro("");
+    setAvisoGoogle("");
     try {
-      if (bloqueadoAtualmente) {
-        await api.desbloquearIp(empresaId, ip);
-      } else {
-        await api.bloquearIp(empresaId, ip);
+      const r = bloqueadoAtualmente ? await api.desbloquearIp(empresaId, ip) : await api.bloquearIp(empresaId, ip);
+      if (r.avisoGoogle) {
+        setAvisoGoogle(
+          `IP ${bloqueadoAtualmente ? "desbloqueado" : "bloqueado"} localmente, mas o Google Ads avisou: ${r.avisoGoogle}`,
+        );
       }
       await carregar();
     } catch (e) {
@@ -88,15 +91,22 @@ export default function BloqueioIp() {
         <h1 className="text-2xl font-semibold tracking-tight">Bloqueio de IP</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Todo visitante que passa pelo script de rastreio aparece aqui com o IP, se veio de um anúncio e quanto
-          tempo ficou no site. Bloquear um IP não mexe na sua campanha do Google Ads — é só interno: a partir daí,
-          se esse IP fechar uma "venda" numa conversa, a conversão não é mais enviada. Você decide o critério (ex:
-          muitas visitas rápidas do mesmo IP, tempo no site muito baixo, etc).
+          tempo ficou no site. Bloquear um IP é pra clique suspeito (ex: concorrente clicando repetido no seu
+          anúncio) — o IP é excluído de todas as campanhas ativas da sua conta do Google Ads, pra parar de gastar
+          seu orçamento com ele. Isso é <strong>independente</strong> do envio de conversão de venda: uma venda
+          confirmada sempre é enviada normalmente pro Google Ads, IP bloqueado ou não — são dois mecanismos que não
+          se misturam.
         </p>
       </div>
 
       {erro && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
           {erro}
+        </p>
+      )}
+      {avisoGoogle && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          {avisoGoogle}
         </p>
       )}
 
@@ -213,6 +223,15 @@ export default function BloqueioIp() {
                         {v.motivoBloqueio && (
                           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{v.motivoBloqueio}</p>
                         )}
+                        {v.googleAplicado ? (
+                          <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                            Excluído nas campanhas do Google Ads
+                          </p>
+                        ) : v.googleErro ? (
+                          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                            Não aplicado no Google Ads: {v.googleErro}
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
                       <span className="text-xs text-slate-400 dark:text-slate-500">Liberado</span>

@@ -1,4 +1,4 @@
-import { db, ipEstaBloqueado, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
+import { db, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
 import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
 import { proximoHorarioEnvio, formatarHorarioBrasilia, enviarVendaParaGoogleAds } from "./filaDeEnvio.js";
@@ -102,19 +102,20 @@ export function listarMensagens(conversaId) {
 }
 
 /**
- * Marca a venda. Se houver gclid (e o IP não estiver bloqueado), a conversão
- * NÃO é enviada na hora — entra na fila e é enviada automaticamente às 08h
- * ou 20h (horário de Brasília), a não ser que o usuário mande antes ou
- * cancele em "Vendas para Envio".
+ * Marca a venda. Se houver gclid, a conversão NÃO é enviada na hora — entra
+ * na fila e é enviada automaticamente às 08h ou 20h (horário de Brasília), a
+ * não ser que o usuário mande antes ou cancele em "Vendas para Envio".
+ *
+ * O bloqueio de IP é um mecanismo separado (clique suspeito de anúncio, gera
+ * exclusão direto nas campanhas do Google Ads) e não interfere aqui — uma
+ * venda confirmada sempre entra na fila normalmente, IP bloqueado ou não.
  */
 export async function confirmarVenda(empresa, conversa, valor) {
   let filaStatus = null;
   let envioAgendadoPara = null;
   let respostaConversao;
 
-  if (conversa.ip && ipEstaBloqueado(empresa.id, conversa.ip)) {
-    respostaConversao = `Venda marcada, mas a conversão NÃO foi enviada: o IP ${conversa.ip} está bloqueado.`;
-  } else if (conversa.gclid) {
+  if (conversa.gclid) {
     filaStatus = "pendente";
     envioAgendadoPara = proximoHorarioEnvio().toISOString();
     respostaConversao = `Venda marcada — a conversão entra na fila e é enviada automaticamente às ${formatarHorarioBrasilia(envioAgendadoPara)}. Você pode mandar antes ou cancelar em "Vendas para Envio".`;

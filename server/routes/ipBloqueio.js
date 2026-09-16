@@ -1,24 +1,24 @@
 import { Router } from "express";
-import {
-  listarVisitasPorIp,
-  listarIpsBloqueados,
-  bloquearIp,
-  desbloquearIp,
-  atualizarConfigBloqueioAuto,
-} from "../db.js";
+import { listarVisitasPorIp, listarIpsBloqueados, atualizarConfigBloqueioAuto } from "../db.js";
+import { bloquearIpComGoogleAds, desbloquearIpComGoogleAds } from "../ipBloqueio.js";
 
 export const ipBloqueioRouter = Router({ mergeParams: true });
 
 const IP_VALIDO = /^[0-9a-fA-F.:]{3,45}$/;
 
 ipBloqueioRouter.get("/", (req, res) => {
-  const bloqueados = new Map(listarIpsBloqueados(req.empresaId).map((b) => [b.ip, b.motivo]));
-  const visitas = listarVisitasPorIp(req.empresaId).map((v) => ({
-    ...v,
-    veioDeAnuncio: Boolean(v.veioDeAnuncio),
-    bloqueado: bloqueados.has(v.ip),
-    motivoBloqueio: bloqueados.get(v.ip) ?? null,
-  }));
+  const bloqueados = new Map(listarIpsBloqueados(req.empresaId).map((b) => [b.ip, b]));
+  const visitas = listarVisitasPorIp(req.empresaId).map((v) => {
+    const b = bloqueados.get(v.ip);
+    return {
+      ...v,
+      veioDeAnuncio: Boolean(v.veioDeAnuncio),
+      bloqueado: Boolean(b),
+      motivoBloqueio: b?.motivo ?? null,
+      googleAplicado: Boolean(b?.google_criterios),
+      googleErro: b?.google_erro ?? null,
+    };
+  });
   res.json({
     visitas,
     bloqueados: [...bloqueados.keys()],
@@ -45,16 +45,18 @@ ipBloqueioRouter.put("/config", (req, res) => {
   res.json({ ok: true });
 });
 
-ipBloqueioRouter.post("/bloquear", (req, res) => {
+/** Bloqueia localmente (sempre funciona) e tenta excluir o IP das campanhas ativas do Google Ads (best-effort). */
+ipBloqueioRouter.post("/bloquear", async (req, res) => {
   const ip = String(req.body?.ip ?? "").trim();
   if (!ip || !IP_VALIDO.test(ip)) return res.status(400).json({ erro: "IP inválido." });
-  bloquearIp(req.empresaId, ip);
-  res.json({ ok: true });
+  const r = await bloquearIpComGoogleAds(req.empresaId, ip);
+  res.json({ ok: true, avisoGoogle: r.ok ? (r.aviso ?? null) : r.erro });
 });
 
-ipBloqueioRouter.post("/desbloquear", (req, res) => {
+/** Desbloqueia localmente e remove a exclusão correspondente nas campanhas do Google Ads (se tinha sido aplicada). */
+ipBloqueioRouter.post("/desbloquear", async (req, res) => {
   const ip = String(req.body?.ip ?? "").trim();
   if (!ip) return res.status(400).json({ erro: "IP inválido." });
-  desbloquearIp(req.empresaId, ip);
-  res.json({ ok: true });
+  const r = await desbloquearIpComGoogleAds(req.empresaId, ip);
+  res.json({ ok: true, avisoGoogle: r.ok ? null : r.erro });
 });

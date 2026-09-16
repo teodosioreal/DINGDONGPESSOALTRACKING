@@ -322,6 +322,89 @@ export async function listarCampanhas(empresaId) {
   return { campanhas };
 }
 
+/** IDs das campanhas ATIVAS (ENABLED) da conta — usado pra aplicar a exclusão de IP em todas elas. */
+async function campanhasAtivas(token, developerToken, customerId, loginCustomerId) {
+  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
+    method: "POST",
+    headers: cabecalhos(token, developerToken, loginCustomerId),
+    body: JSON.stringify({ query: "SELECT campaign.id FROM campaign WHERE campaign.status = 'ENABLED'" }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { erro: mensagemAmigavel(d.error?.message, res.status) };
+  return { ids: (d.results ?? []).map((r) => String(r.campaign?.id ?? "")).filter(Boolean) };
+}
+
+/**
+ * Exclui um IP de todas as campanhas ATIVAS da conta do Google Ads conectada
+ * dessa empresa — é o mecanismo de "clique suspeito" (bloqueio de IP),
+ * totalmente separado do envio de conversão de venda: um IP bloqueado passa
+ * a não ver/gastar clique nos seus anúncios, mas isso não tem nada a ver com
+ * se uma venda específica é enviada ou não pro Google Ads.
+ *
+ * Devolve os resourceNames dos critérios criados, pra poder remover se a
+ * empresa desbloquear o IP depois. Best-effort: se a empresa ainda não
+ * conectou o Google Ads, devolve erro sem quebrar o bloqueio local do IP.
+ */
+export async function excluirIpDasCampanhas(empresaId, ip) {
+  const c = lerCredenciaisApp();
+  if (c.erro) return { ok: false, erro: c.erro };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return { ok: false, erro: auth.erro };
+
+  const campanhas = await campanhasAtivas(auth.token, c.developerToken, customerId, loginCustomerId);
+  if (campanhas.erro) return { ok: false, erro: campanhas.erro };
+  if (campanhas.ids.length === 0) return { ok: true, resourceNames: [] };
+
+  const operations = campanhas.ids.map((id) => ({
+    create: {
+      campaign: `customers/${customerId}/campaigns/${id}`,
+      negative: true,
+      ipBlock: { ipAddress: ip },
+    },
+  }));
+
+  const res = await fetch(
+    `https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaignCriteria:mutate`,
+    {
+      method: "POST",
+      headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
+      body: JSON.stringify({ operations, partialFailure: true }),
+    },
+  );
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
+
+  const resourceNames = (d.results ?? []).map((r) => r.resourceName).filter(Boolean);
+  const avisoParcial = d.partialFailureError ? mensagemAmigavel(d.partialFailureError.message, res.status) : null;
+  return { ok: true, resourceNames, aviso: avisoParcial };
+}
+
+/** Remove exclusões de IP criadas anteriormente pelas campanhas (desbloqueio). */
+export async function removerExclusaoIp(empresaId, resourceNames) {
+  if (!resourceNames || resourceNames.length === 0) return { ok: true };
+  const c = lerCredenciaisApp();
+  if (c.erro) return { ok: false, erro: c.erro };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return { ok: false, erro: auth.erro };
+
+  const operations = resourceNames.map((resourceName) => ({ remove: resourceName }));
+  const res = await fetch(
+    `https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaignCriteria:mutate`,
+    {
+      method: "POST",
+      headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
+      body: JSON.stringify({ operations, partialFailure: true }),
+    },
+  );
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
+  return { ok: true };
+}
+
 async function acaoDeConversao(token, developerToken, customerId, loginCustomerId) {
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
     method: "POST",

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { db, buscarEmpresa, ipEstaBloqueado, bloquearIp, contarCliquesRecentesDoIp } from "./db.js";
+import { db, buscarEmpresa, ipEstaBloqueado, contarCliquesRecentesDoIp } from "./db.js";
+import { bloquearIpComGoogleAds } from "./ipBloqueio.js";
 
 /** Código curto embutido na mensagem pré-preenchida do link do WhatsApp. */
 export function gerarCodigo() {
@@ -31,9 +32,14 @@ export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, i
 /**
  * Bloqueio automático de IP: se um IP fizer mais cliques vindos de anúncio do
  * que o limite configurado, dentro da janela de tempo configurada, ele é
- * bloqueado sozinho (mesmo efeito de bloquear na mão — vendas futuras desse
- * IP não mandam conversão pro Google Ads). Cada empresa escolhe seu próprio
- * limite em Bloqueio de IP; o padrão recomendado é 5 cliques em 5 minutos.
+ * bloqueado sozinho — localmente (registro interno) e, em segundo plano,
+ * excluído das campanhas ativas do Google Ads da empresa. Cada empresa
+ * escolhe seu próprio limite em Bloqueio de IP; o padrão recomendado é 5
+ * cliques em 5 minutos. Isso não tem nenhuma relação com envio de conversão
+ * de venda — são mecanismos completamente separados.
+ *
+ * Não usa `await`: a chamada ao Google Ads não pode atrasar a resposta do
+ * pixel de clique (endpoint público, chamado a cada visita do site).
  */
 function verificarCliqueSuspeito(empresaId, ip) {
   const empresa = buscarEmpresa(empresaId);
@@ -42,7 +48,10 @@ function verificarCliqueSuspeito(empresaId, ip) {
 
   const contagem = contarCliquesRecentesDoIp(empresaId, ip, empresa.bloqueio_auto_minutos);
   if (contagem >= empresa.bloqueio_auto_cliques) {
-    bloquearIp(empresaId, ip, `${contagem} cliques em ${empresa.bloqueio_auto_minutos} min (automático)`);
+    const motivo = `${contagem} cliques em ${empresa.bloqueio_auto_minutos} min (automático)`;
+    bloquearIpComGoogleAds(empresaId, ip, motivo).catch((e) =>
+      console.error(`[bloqueio-ip] falha ao processar bloqueio automático (empresa ${empresaId}, ip ${ip})`, e),
+    );
   }
 }
 
