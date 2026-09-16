@@ -58,7 +58,6 @@ function criarSchema() {
   );
   CREATE INDEX IF NOT EXISTS idx_clicks_codigo ON clicks(codigo);
   CREATE INDEX IF NOT EXISTS idx_clicks_empresa ON clicks(empresa_id);
-  CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);
 
   CREATE TABLE IF NOT EXISTS conversas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,12 +168,19 @@ function adicionarColuna(tabela, coluna, definicao) {
   }
 }
 
-/** Colunas novas adicionadas depois que as tabelas já existiam em produção. */
+/**
+ * Colunas novas adicionadas depois que as tabelas já existiam em produção.
+ * Roda DEPOIS do criarSchema() — índices que dependem dessas colunas também
+ * ficam aqui (não em criarSchema), porque criarSchema() usa CREATE TABLE IF
+ * NOT EXISTS: numa tabela `clicks`/`conversas` já existente sem a coluna
+ * `ip`, um CREATE INDEX ... ON clicks(ip) ali quebraria com SQLITE_ERROR.
+ */
 function migrarColunasNovas() {
   if (!tabelaExiste("clicks") || !tabelaExiste("conversas")) return;
   adicionarColuna("clicks", "ip", "TEXT");
   adicionarColuna("clicks", "duracao_segundos", "INTEGER");
   adicionarColuna("conversas", "ip", "TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
 }
 
 // A migração precisa rodar ANTES do criarSchema() definitivo: se o banco
