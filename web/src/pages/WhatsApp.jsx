@@ -15,6 +15,7 @@ export default function WhatsApp() {
   const [aviso, setAviso] = useState("");
   const [webhookSecret, setWebhookSecret] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [criandoSessao, setCriandoSessao] = useState(false);
 
   useEffect(() => {
     setStatus(null);
@@ -85,6 +86,22 @@ export default function WhatsApp() {
     }
   }
 
+  async function criarSessaoAutomaticamente() {
+    setErro("");
+    setAviso("");
+    setCriandoSessao(true);
+    try {
+      await api.whatsappCriarSessaoAutomatica(empresaId);
+      setAviso("Sessão criada! Escaneie o QR Code abaixo.");
+      await carregarCredenciais();
+      await carregarStatus();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setCriandoSessao(false);
+    }
+  }
+
   async function removerCredenciais() {
     await api.whatsappRemoverCredenciais(empresaId);
     setSessionId("");
@@ -120,8 +137,26 @@ export default function WhatsApp() {
       {erro && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
       {aviso && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{aviso}</p>}
 
+      {!configurado && (
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <p className="mb-3 text-sm text-slate-600">
+            Cria a sessão na D-API automaticamente, já com o nome desta empresa e o webhook configurado — sem
+            precisar entrar no painel da D-API.
+          </p>
+          <button
+            onClick={criarSessaoAutomaticamente}
+            disabled={criandoSessao}
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {criandoSessao ? "Criando…" : "Criar sessão automaticamente"}
+          </button>
+        </div>
+      )}
+
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-700">Credenciais da D-API</h2>
+        <h2 className="mb-2 text-sm font-medium text-slate-700">
+          {configurado ? "Credenciais da D-API" : "Ou preencha manualmente"}
+        </h2>
         <form onSubmit={salvarCredenciais} className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
           <div>
             <label className="mb-1 block text-sm text-slate-600">Session ID</label>

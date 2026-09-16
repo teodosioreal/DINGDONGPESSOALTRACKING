@@ -9,6 +9,7 @@ import {
   credenciaisSalvas,
   salvarCredenciais,
   limparCredenciais,
+  criarSessaoAutomatica,
 } from "../whatsapp.js";
 import { registrarMensagemRecebida } from "../conversas.js";
 
@@ -34,6 +35,13 @@ whatsappRouter.post("/credenciais", (req, res) => {
 whatsappRouter.post("/credenciais/remover", (req, res) => {
   limparCredenciais(req.empresaId);
   res.json({ ok: true });
+});
+
+/** Cria a sessão na D-API automaticamente (nome da empresa + webhook já configurado). */
+whatsappRouter.post("/criar-sessao-automatica", async (req, res) => {
+  const r = await criarSessaoAutomatica(req.empresa);
+  if (r.erro) return res.status(400).json({ erro: r.erro });
+  res.json(r);
 });
 
 whatsappRouter.post("/conectar/qr", async (req, res) => {

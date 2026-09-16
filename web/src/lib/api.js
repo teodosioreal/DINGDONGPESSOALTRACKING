@@ -52,6 +52,8 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/whatsapp/credenciais`, { method: "POST", body: { sessionId, apiKey } }),
   whatsappRemoverCredenciais: (empresaId) =>
     chamar(`/api/empresas/${empresaId}/whatsapp/credenciais/remover`, { method: "POST" }),
+  whatsappCriarSessaoAutomatica: (empresaId) =>
+    chamar(`/api/empresas/${empresaId}/whatsapp/criar-sessao-automatica`, { method: "POST" }),
 
   // ---- Conversas ----
   conversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`),

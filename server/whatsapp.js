@@ -18,6 +18,18 @@
 import { db } from "./db.js";
 
 const BASE = (process.env.DAPI_BASE_URL ?? "https://api.d-api.cloud").replace(/\/$/, "");
+const DAPI_ACCOUNT_API_KEY = process.env.DAPI_ACCOUNT_API_KEY ?? "";
+
+function slugificar(texto) {
+  const limpo = String(texto ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return limpo || "empresa";
+}
 
 export function credenciaisSalvas(empresaId) {
   const c = db.prepare("SELECT session_id, api_key FROM whatsapp_conexoes WHERE empresa_id = ?").get(empresaId);
@@ -63,6 +75,10 @@ async function consultarQr(empresaId) {
   return chamar(empresaId, "/qr");
 }
 
+function esperar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function statusConexao(empresaId) {
   const erro = faltaConfigurar(empresaId);
   if (erro) return { configurado: false, conectado: false, erro };
@@ -71,10 +87,15 @@ export async function statusConexao(empresaId) {
   return { configurado: true, conectado: r.dados?.status === "connected" };
 }
 
+const POLL_INTERVALO_MS = 5000;
+const POLL_MAX_TENTATIVAS = 5; // ~25s esperando o QR novo depois do /connect
+
 /**
  * Devolve o QR Code atual pra escanear. Se o código já tiver expirado,
- * chama /connect pra gerar um novo antes de devolver (conforme a
- * documentação da D-API).
+ * chama /connect UMA VEZ pra gerar um novo e faz polling em /qr a cada 5s
+ * até ele atualizar (conforme a documentação da D-API) antes de devolver —
+ * assim o front, que também faz polling a cada 5s, não acaba disparando um
+ * /connect novo a cada chamada e resetando o QR sem ele nunca estabilizar.
  */
 export async function gerarQrCode(empresaId) {
   const erro = faltaConfigurar(empresaId);
@@ -88,12 +109,54 @@ export async function gerarQrCode(empresaId) {
   if (r.dados?.expired) {
     const reconectar = await chamar(empresaId, "/connect");
     if (!reconectar.ok) return { erro: "Não foi possível reconectar a sessão agora." };
-    r = await consultarQr(empresaId);
-    if (!r.ok) return { erro: "Não foi possível gerar um novo QR Code agora." };
+
+    for (let tentativa = 0; tentativa < POLL_MAX_TENTATIVAS; tentativa += 1) {
+      await esperar(POLL_INTERVALO_MS);
+      r = await consultarQr(empresaId);
+      if (!r.ok) return { erro: "Não foi possível gerar um novo QR Code agora." };
+      if (r.dados?.status === "connected" || !r.dados?.expired) break;
+    }
   }
 
   if (r.dados?.status === "connected") return { conectado: true };
   return { imagemBase64: r.dados?.qrCodeImage, conectado: false };
+}
+
+/**
+ * Cria a sessão da D-API automaticamente (nome baseado na empresa) e já
+ * configura o webhook dela — assim não precisa mais entrar no painel da
+ * D-API pra conectar um cliente novo. Confirmado no OpenAPI oficial:
+ * POST /api/v1/sessions, autenticado com a MESMA chave de API da conta (o
+ * schema declara um único ApiKeyAuth global pra toda a API, sem chave por
+ * sessão) — por isso essa mesma chave é salva como "apiKey" da empresa.
+ */
+export async function criarSessaoAutomatica(empresa) {
+  if (!DAPI_ACCOUNT_API_KEY) {
+    return { erro: "Falta configurar DAPI_ACCOUNT_API_KEY no .env do servidor pra criar sessões automaticamente." };
+  }
+  const sessionId = `${slugificar(empresa.nome)}-${empresa.id}`;
+  const webhookUrl = `${process.env.APP_PUBLIC_URL}/api/public/whatsapp/webhook?empresa=${empresa.id}&chave=${empresa.webhook_secret}`;
+
+  const res = await fetch(`${BASE}/api/v1/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: DAPI_ACCOUNT_API_KEY },
+    body: JSON.stringify({
+      sessionId,
+      type: "unofficial",
+      webhookUrl,
+      connectionMode: "qr",
+      ignoreGroups: true,
+      ignoreStatus: true,
+      historySync: false,
+    }),
+  });
+  if (!res.ok) {
+    const corpo = await res.json().catch(() => ({}));
+    return { erro: corpo?.message ?? `Não foi possível criar a sessão na D-API (status ${res.status}).` };
+  }
+
+  salvarCredenciais(empresa.id, { sessionId, apiKey: DAPI_ACCOUNT_API_KEY });
+  return { ok: true, sessionId };
 }
 
 export async function gerarCodigoPareamento(empresaId, telefone) {
