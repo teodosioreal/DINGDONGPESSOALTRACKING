@@ -296,7 +296,9 @@ export function listarEmpresas() {
   return db
     .prepare(
       `SELECT e.*,
-              (g.refresh_token IS NOT NULL AND g.customer_id IS NOT NULL) AS googleConectado,
+              (g.refresh_token IS NOT NULL AND EXISTS(
+                SELECT 1 FROM google_contas_selecionadas gc WHERE gc.empresa_id = e.id
+              )) AS googleConectado,
               (w.session_id IS NOT NULL AND w.api_key IS NOT NULL) AS whatsappConfigurado,
               (e.palavras_chave IS NOT NULL AND TRIM(e.palavras_chave) != '') AS regrasConfiguradas,
               EXISTS(SELECT 1 FROM clicks c WHERE c.empresa_id = e.id) AS pixelInstalado
@@ -477,11 +479,14 @@ export function contarConversasNaoLidas(empresaId) {
 /** Resumo de quanto do setup da empresa já está pronto — pra tela Painel. */
 export function checklistSetup(empresaId) {
   const empresa = db.prepare("SELECT palavras_chave FROM empresas WHERE id = ?").get(empresaId);
-  const google = db.prepare("SELECT refresh_token, customer_id FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
+  const google = db.prepare("SELECT refresh_token FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
+  const temContaGoogle = db
+    .prepare("SELECT 1 FROM google_contas_selecionadas WHERE empresa_id = ?")
+    .get(empresaId);
   const whatsapp = db.prepare("SELECT session_id, api_key FROM whatsapp_conexoes WHERE empresa_id = ?").get(empresaId);
   const ultimoClique = db.prepare("SELECT MAX(criado_em) AS quando FROM clicks WHERE empresa_id = ?").get(empresaId);
   return {
-    googleConectado: Boolean(google?.refresh_token && google?.customer_id),
+    googleConectado: Boolean(google?.refresh_token && temContaGoogle),
     whatsappConfigurado: Boolean(whatsapp?.session_id && whatsapp?.api_key),
     regrasConfiguradas: Boolean(empresa?.palavras_chave?.trim()),
     ultimoCliqueEm: ultimoClique?.quando ?? null,

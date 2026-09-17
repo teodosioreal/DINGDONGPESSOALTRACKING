@@ -4,6 +4,7 @@ export const PERIODOS = [
   { valor: "30dias", rotulo: "Últimos 30 dias" },
   { valor: "este_mes", rotulo: "Este mês" },
   { valor: "mes_passado", rotulo: "Mês passado" },
+  { valor: "todo_periodo", rotulo: "Todo período" },
 ];
 
 export default function PeriodoSelect({ valor, onChange }) {

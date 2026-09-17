@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 import PeriodoSelect from "../components/PeriodoSelect.jsx";
@@ -24,6 +24,10 @@ export default function GoogleAds() {
   const [periodo, setPeriodo] = useState("30dias");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [contasExpandido, setContasExpandido] = useState(true);
+  const [selecaoExpandida, setSelecaoExpandida] = useState(true);
+  const contasJaInicializadoRef = useRef(false);
+  const selecaoJaInicializadaRef = useRef(false);
 
   useEffect(() => {
     setStatus(null);
@@ -32,6 +36,8 @@ export default function GoogleAds() {
     setMccAberta(null);
     setSubcontas(null);
     setCampanhas(null);
+    contasJaInicializadoRef.current = false;
+    selecaoJaInicializadaRef.current = false;
     carregarStatus();
     const params = new URLSearchParams(window.location.search);
     if (params.get("erro")) setErro(params.get("erro"));
@@ -45,9 +51,14 @@ export default function GoogleAds() {
     try {
       const s = await api.googleStatus(empresaId);
       setStatus(s);
-      setContasMonitoradas(s.contas ?? []);
+      const contas = s.contas ?? [];
+      setContasMonitoradas(contas);
+      if (!contasJaInicializadoRef.current) {
+        contasJaInicializadoRef.current = true;
+        setContasExpandido(contas.length === 0);
+      }
       if (s.conectado) carregarContas();
-      if (s.conectado && (s.contas ?? []).length > 0) carregarCampanhas();
+      if (s.conectado && contas.length > 0) carregarCampanhas();
       else setCampanhas(null);
     } catch (e) {
       setErro(e.message);
@@ -136,6 +147,10 @@ export default function GoogleAds() {
       setCampanhas(r.campanhas);
       setAvisosCampanhas(r.avisos);
       setSelecionadas(new Set(sel.ids.map(String)));
+      if (!selecaoJaInicializadaRef.current) {
+        selecaoJaInicializadaRef.current = true;
+        setSelecaoExpandida(sel.ids.length === 0);
+      }
     } catch (e) {
       setErro(e.message);
     }
@@ -157,6 +172,7 @@ export default function GoogleAds() {
     try {
       await api.googleSalvarCampanhasSelecionadas(empresaId, Array.from(selecionadas));
       setAvisoSelecao("Seleção salva — o Painel agora mostra só essas campanhas.");
+      setSelecaoExpandida(false);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -230,7 +246,17 @@ export default function GoogleAds() {
 
       {status?.conectado && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <p className="mb-3 text-sm font-medium">Contas monitoradas</p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-medium">
+              Contas monitoradas {contasMonitoradas.length > 0 && `(${contasMonitoradas.length})`}
+            </p>
+            <button
+              onClick={() => setContasExpandido((v) => !v)}
+              className="text-sm font-medium text-slate-500 hover:underline dark:text-slate-400"
+            >
+              {contasExpandido ? "Concluir" : "Adicionar contas"}
+            </button>
+          </div>
           {contasMonitoradas.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Nenhuma conta monitorada ainda. Escolha uma ou mais abaixo.
@@ -260,7 +286,7 @@ export default function GoogleAds() {
         </div>
       )}
 
-      {status?.conectado && (
+      {status?.conectado && contasExpandido && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium">
@@ -346,10 +372,22 @@ export default function GoogleAds() {
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-medium">Campanhas</h2>
-            <PeriodoSelect valor={periodo} onChange={setPeriodo} />
+            <div className="flex items-center gap-3">
+              <PeriodoSelect valor={periodo} onChange={setPeriodo} />
+              {!selecaoExpandida && (
+                <button
+                  onClick={() => setSelecaoExpandida(true)}
+                  className="text-sm font-medium text-slate-500 hover:underline dark:text-slate-400"
+                >
+                  Editar seleção
+                </button>
+              )}
+            </div>
           </div>
           <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-            Marque as campanhas que você quer acompanhar — só as marcadas entram nos insights do Painel.
+            {selecaoExpandida
+              ? "Marque as campanhas que você quer acompanhar — só as marcadas entram nos insights do Painel."
+              : `${selecionadas.size} campanha(s) selecionada(s) pros insights do Painel.`}
           </p>
           {avisosCampanhas && avisosCampanhas.length > 0 && (
             <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
@@ -360,7 +398,7 @@ export default function GoogleAds() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-2"></th>
+                  {selecaoExpandida && <th className="px-4 py-2"></th>}
                   <th className="px-4 py-2">Campanha</th>
                   <th className="px-4 py-2">Conta</th>
                   <th className="px-4 py-2">Status</th>
@@ -374,14 +412,16 @@ export default function GoogleAds() {
               <tbody>
                 {campanhas.map((c) => (
                   <tr key={c.chave} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-4 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selecionadas.has(c.chave)}
-                        onChange={() => alternarSelecao(c.chave)}
-                        className="size-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800"
-                      />
-                    </td>
+                    {selecaoExpandida && (
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selecionadas.has(c.chave)}
+                          onChange={() => alternarSelecao(c.chave)}
+                          className="size-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800"
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-2">{c.nome}</td>
                     <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{c.customerNome}</td>
                     <td className="px-4 py-2">{c.status}</td>
@@ -405,16 +445,18 @@ export default function GoogleAds() {
               </tbody>
             </table>
           </div>
-          <div className="mt-3 flex items-center gap-3">
-            <button
-              onClick={salvarSelecao}
-              disabled={salvandoSelecao}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-            >
-              {salvandoSelecao ? "Salvando…" : "Salvar campanhas acompanhadas"}
-            </button>
-            {avisoSelecao && <p className="text-sm text-green-700 dark:text-green-400">{avisoSelecao}</p>}
-          </div>
+          {selecaoExpandida && (
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={salvarSelecao}
+                disabled={salvandoSelecao}
+                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              >
+                {salvandoSelecao ? "Salvando…" : "Salvar campanhas acompanhadas"}
+              </button>
+              {avisoSelecao && <p className="text-sm text-green-700 dark:text-green-400">{avisoSelecao}</p>}
+            </div>
+          )}
         </div>
       )}
     </div>

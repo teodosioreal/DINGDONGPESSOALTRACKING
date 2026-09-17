@@ -133,11 +133,9 @@ export default function Vendas() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="rounded-xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-5 dark:border-amber-700 dark:from-amber-950/40 dark:to-yellow-950/40">
-        <h1 className="text-4xl font-extrabold tracking-tight text-amber-900 dark:text-amber-300">
-          🤑 VENDAS 🤑
-        </h1>
-        <p className="mt-2 text-sm text-amber-800 dark:text-amber-400">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Vendas</h1>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Todas as vendas confirmadas. O que importa de verdade é o que tem rastreio (gclid) — é isso que vira
           conversão no Google Ads.
         </p>
@@ -168,17 +166,16 @@ export default function Vendas() {
           }`}
         >
           {resultadoTeste.mensagem ? (
-            <p>❌ {resultadoTeste.mensagem}</p>
+            <p>{resultadoTeste.mensagem}</p>
           ) : (
             <>
               <p>
-                {resultadoTeste.ok ? "✅" : "⚠️"} Ação "{resultadoTeste.nome}" testada em{" "}
-                {resultadoTeste.detalhes.length} conta(s):
+                Ação "{resultadoTeste.nome}" testada em {resultadoTeste.detalhes.length} conta(s):
               </p>
               <ul className="ml-4 list-disc">
                 {resultadoTeste.detalhes.map((d) => (
                   <li key={d.customerId}>
-                    {d.nome || d.customerId}: {d.ok ? "✅ pronta" : `❌ ${d.erro}`}
+                    {d.nome || d.customerId}: {d.ok ? "pronta" : d.erro}
                   </li>
                 ))}
               </ul>

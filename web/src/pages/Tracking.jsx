@@ -5,6 +5,7 @@ import { api } from "../lib/api.js";
 const DURACAO_TESTE_MS = 30_000;
 const INTERVALO_POLL_MS = 2_000;
 const INTERVALO_BARRA_MS = 200;
+const FALLBACK_ABA_MS = 6_000;
 
 function formatarData(dataIso) {
   if (!dataIso) return "—";
@@ -24,13 +25,16 @@ export default function Tracking() {
   const [siteUrl, setSiteUrl] = useState("");
   const [status, setStatus] = useState(null); // null | "aguardando" | "sucesso" | "falha"
   const [progresso, setProgresso] = useState(0);
+  const [usandoAbaFallback, setUsandoAbaFallback] = useState(false);
   const [erroTeste, setErroTeste] = useState("");
   const [sites, setSites] = useState([]);
   const [regenerando, setRegenerando] = useState(false);
   const [erroRegenerar, setErroRegenerar] = useState("");
+  const [codigoExpandido, setCodigoExpandido] = useState(false);
   const pollingRef = useRef(null);
   const urlTestadaRef = useRef("");
   const iframeRef = useRef(null);
+  const abaFallbackRef = useRef(null);
 
   const script = trackingToken
     ? `<script src="${window.location.origin}/t.js" data-empresa="${trackingToken}" async></script>`
@@ -64,12 +68,18 @@ export default function Tracking() {
       clearInterval(pollingRef.current.intervalo);
       clearInterval(pollingRef.current.barra);
       clearTimeout(pollingRef.current.timeout);
+      clearTimeout(pollingRef.current.fallbackTimeout);
       pollingRef.current = null;
     }
     if (iframeRef.current) {
       iframeRef.current.remove();
       iframeRef.current = null;
     }
+    if (abaFallbackRef.current && !abaFallbackRef.current.closed) {
+      abaFallbackRef.current.close();
+    }
+    abaFallbackRef.current = null;
+    setUsandoAbaFallback(false);
   }
 
   function testarInstalacao() {
@@ -84,17 +94,32 @@ export default function Tracking() {
 
     const marcador = `teste-${Math.random().toString(36).slice(2, 10)}`;
     const separador = url.includes("?") ? "&" : "?";
+    const urlComMarcador = `${url}${separador}gclid=${marcador}`;
 
     pararTeste();
     setStatus("aguardando");
     setProgresso(0);
 
-    // Carrega o site num iframe escondido (sem abrir aba nova) só pra disparar
-    // o script de rastreio dele com o marcador de teste.
+    // Alguns sites bloqueiam ser carregados dentro de outra página
+    // (X-Frame-Options / CSP frame-ancestors — bem comum em hospedagens com
+    // proteção de segurança). Pra não depender só do iframe, já abre uma aba
+    // em branco AGORA, dentro do clique (senão o navegador bloqueia o
+    // pop-up por não ser mais uma ação direta do usuário) — mas só navega
+    // ela de verdade pro site depois, se o iframe não bastar em alguns
+    // segundos. Se o iframe funcionar, essa aba nunca chega a ser usada e
+    // é fechada sozinha.
+    let aba = null;
+    try {
+      aba = window.open("", "_blank");
+    } catch {
+      /* pop-up bloqueado — segue só com o iframe */
+    }
+    abaFallbackRef.current = aba;
+
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:absolute;width:1px;height:1px;border:0;opacity:0;pointer-events:none;";
     iframe.setAttribute("aria-hidden", "true");
-    iframe.src = `${url}${separador}gclid=${marcador}`;
+    iframe.src = urlComMarcador;
     document.body.appendChild(iframe);
     iframeRef.current = iframe;
 
@@ -102,6 +127,17 @@ export default function Tracking() {
     const barra = setInterval(() => {
       setProgresso(Math.min(100, Math.round(((Date.now() - inicio) / DURACAO_TESTE_MS) * 100)));
     }, INTERVALO_BARRA_MS);
+
+    const fallbackTimeout = setTimeout(() => {
+      if (abaFallbackRef.current && !abaFallbackRef.current.closed) {
+        setUsandoAbaFallback(true);
+        try {
+          abaFallbackRef.current.location.href = urlComMarcador;
+        } catch {
+          /* ignora — segue esperando só pelo iframe */
+        }
+      }
+    }, FALLBACK_ABA_MS);
 
     const intervalo = setInterval(async () => {
       try {
@@ -125,7 +161,7 @@ export default function Tracking() {
       setStatus((atual) => (atual === "aguardando" ? "falha" : atual));
     }, DURACAO_TESTE_MS);
 
-    pollingRef.current = { intervalo, timeout, barra };
+    pollingRef.current = { intervalo, timeout, barra, fallbackTimeout };
   }
 
   function removerSite(url) {
@@ -146,6 +182,7 @@ export default function Tracking() {
     try {
       const r = await api.regenerarCodigoTracking(empresaId);
       setTrackingToken(r.trackingToken);
+      setCodigoExpandido(false);
     } catch (e) {
       setErroRegenerar(e.message);
     } finally {
@@ -163,27 +200,58 @@ export default function Tracking() {
         clique de anúncio e marca automaticamente os links de WhatsApp da página.
       </p>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-900 p-4 dark:border-slate-800">
-        <code className="break-all text-sm text-slate-100">{script || "Carregando…"}</code>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={copiar}
-          disabled={!script}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:opacity-90 dark:bg-white dark:text-slate-900"
-        >
-          {copiado ? "Copiado!" : "Copiar código"}
-        </button>
-        <button
-          onClick={regenerarCodigo}
-          disabled={regenerando || !script}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-        >
-          {regenerando ? "Gerando…" : "Gerar novo código"}
-        </button>
-      </div>
-      {erroRegenerar && <p className="text-sm text-red-600 dark:text-red-400">{erroRegenerar}</p>}
+      {!script ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando…</p>
+      ) : !codigoExpandido ? (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <div>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Código de instalação pronto</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Cole no site se ainda não colou.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={copiar}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
+            >
+              {copiado ? "Copiado!" : "Copiar código"}
+            </button>
+            <button
+              onClick={() => setCodigoExpandido(true)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Ver código
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-900 p-4 dark:border-slate-800">
+            <code className="break-all text-sm text-slate-100">{script}</code>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copiar}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-white dark:text-slate-900"
+            >
+              {copiado ? "Copiado!" : "Copiar código"}
+            </button>
+            <button
+              onClick={regenerarCodigo}
+              disabled={regenerando}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 disabled:opacity-50 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              {regenerando ? "Gerando…" : "Gerar novo código"}
+            </button>
+            <button
+              onClick={() => setCodigoExpandido(false)}
+              className="text-sm font-medium text-slate-500 hover:underline dark:text-slate-400"
+            >
+              Recolher
+            </button>
+          </div>
+          {erroRegenerar && <p className="text-sm text-red-600 dark:text-red-400">{erroRegenerar}</p>}
+        </div>
+      )}
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
         Importante: seus links de WhatsApp precisam apontar para <code>wa.me</code> ou{" "}
@@ -194,8 +262,9 @@ export default function Tracking() {
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Testar instalação</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Depois de colar o script no site, use isso pra confirmar sem precisar gastar com anúncio de verdade: a
-          gente carrega seu site em segundo plano (sem abrir aba nova) com um clique de teste e espera até 30
-          segundos pra ver se ele chega aqui.
+          gente carrega seu site em segundo plano com um clique de teste e espera até 30 segundos pra ver se ele
+          chega aqui. Se o seu site não permitir isso (proteção de segurança comum em hospedagens), abrimos uma
+          aba automaticamente só pra completar o teste.
         </p>
         <div className="flex flex-wrap gap-2">
           <input
@@ -223,7 +292,11 @@ export default function Tracking() {
                 style={{ width: `${progresso}%` }}
               />
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Aguardando o clique de teste chegar…</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {usandoAbaFallback
+                ? "Seu site não permitiu carregar em segundo plano — abrimos uma aba pra completar o teste, pode deixá-la aberta."
+                : "Aguardando o clique de teste chegar…"}
+            </p>
           </div>
         )}
         {status === "sucesso" && (
@@ -235,11 +308,13 @@ export default function Tracking() {
           <div className="space-y-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
             <p>
               ❌ Não recebemos nada em 30 segundos. Confira se o script está mesmo colado no{" "}
-              <code>&lt;head&gt;</code> do site.
+              <code>&lt;head&gt;</code> do site (dentro do <code>&lt;head&gt;</code>, antes de{" "}
+              <code>&lt;/head&gt;</code>) e se o endereço digitado está correto.
             </p>
             <p>
-              Alguns sites bloqueiam ser carregados em segundo plano por outra página (proteção de segurança) — se
-              você tem certeza que instalou certo, abra{" "}
+              Se uma aba chegou a abrir durante o teste e mesmo assim não deu certo, pode ser um bloqueador de
+              anúncio/rastreio no navegador que você está usando pra testar — desative temporariamente e tente de
+              novo, ou abra{" "}
               <a
                 href={urlTestadaRef.current || siteUrl}
                 target="_blank"
@@ -248,8 +323,7 @@ export default function Tracking() {
               >
                 seu site
               </a>{" "}
-              manualmente numa aba, espere alguns segundos com ela aberta e tente o teste de novo — ou desative
-              temporariamente bloqueadores de anúncio/rastreio no navegador que você está usando pra testar.
+              manualmente e confira no código-fonte da página se o script aparece.
             </p>
           </div>
         )}

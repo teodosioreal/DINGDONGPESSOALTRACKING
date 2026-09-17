@@ -349,9 +349,19 @@ const PERIODOS_VALIDOS = {
   mes_passado: "LAST_MONTH",
 };
 
-/** Traduz o período escolhido na tela pro macro de data do GAQL — cai em LAST_30_DAYS se vier algo inesperado. */
-function macroPeriodo(periodo) {
-  return PERIODOS_VALIDOS[periodo] ?? "LAST_30_DAYS";
+/**
+ * Traduz o período escolhido na tela pra cláusula de data do GAQL. "Todo
+ * período" não tem macro no GAQL (e a API exige algum filtro de data pra
+ * consultar métricas) — usa um BETWEEN bem largo, desde antes de existir
+ * Google Ads até hoje. Cai em LAST_30_DAYS se vier algo inesperado.
+ */
+function clausulaPeriodo(periodo) {
+  if (periodo === "todo_periodo") {
+    const hoje = new Date().toISOString().slice(0, 10);
+    return `segments.date BETWEEN '2000-01-01' AND '${hoje}'`;
+  }
+  const macro = PERIODOS_VALIDOS[periodo] ?? "LAST_30_DAYS";
+  return `segments.date DURING ${macro}`;
 }
 
 /**
@@ -386,7 +396,7 @@ export async function listarCampanhas(empresaId, periodo) {
                     metrics.average_cpc, metrics.cost_micros, metrics.conversions, metrics.cost_per_conversion,
                     metrics.invalid_clicks
                   FROM campaign
-                  WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.status != 'REMOVED'`,
+                  WHERE ${clausulaPeriodo(periodo)} AND campaign.status != 'REMOVED'`,
         }),
       },
     );
@@ -497,7 +507,7 @@ export async function metricasCampanhasSelecionadas(empresaId, periodo) {
         headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
         body: JSON.stringify({
           query: `SELECT metrics.invalid_clicks, metrics.average_cpc FROM campaign
-                  WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
+                  WHERE ${clausulaPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
         }),
       },
     );

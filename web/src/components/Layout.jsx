@@ -88,7 +88,7 @@ export default function Layout({ aoSair }) {
         { to: `/app/empresas/${empresaId}/tracking`, label: "Instalar Rastreio" },
         { to: `/app/empresas/${empresaId}/regras-venda`, label: "Regras de Venda" },
         { to: `/app/empresas/${empresaId}/bloqueio-ip`, label: "Bloqueio de IP" },
-        { to: `/app/empresas/${empresaId}/vendas`, label: "🤑 VENDAS 🤑", destaque: true },
+        { to: `/app/empresas/${empresaId}/vendas`, label: "Vendas" },
       ]
     : [];
 
@@ -134,17 +134,11 @@ export default function Layout({ aoSair }) {
                   to={item.to}
                   end={item.fim}
                   className={({ isActive }) =>
-                    item.destaque
-                      ? `flex items-center justify-between rounded-md px-3 py-2.5 text-lg font-extrabold tracking-tight transition-colors ${
-                          isActive
-                            ? "bg-amber-500 text-white shadow-sm"
-                            : "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-900 hover:from-amber-200 hover:to-yellow-200 dark:from-amber-950/50 dark:to-yellow-950/50 dark:text-amber-300"
-                        }`
-                      : `flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                          isActive
-                            ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                            : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                        }`
+                    `flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    }`
                   }
                 >
                   <span>{item.label}</span>
