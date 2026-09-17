@@ -26,22 +26,24 @@ ipBloqueioRouter.get("/", (req, res) => {
       ativo: Boolean(req.empresa.bloqueio_auto_ativo),
       cliques: req.empresa.bloqueio_auto_cliques,
       minutos: req.empresa.bloqueio_auto_minutos,
+      escopo: req.empresa.bloqueio_auto_escopo === "todas" ? "todas" : "ativas",
     },
   });
 });
 
-/** Configura o bloqueio automático de IP (limite de cliques vindos de anúncio numa janela de tempo). */
+/** Configura o bloqueio automático de IP (limite de cliques vindos de anúncio numa janela de tempo, e onde aplicar a exclusão). */
 ipBloqueioRouter.put("/config", (req, res) => {
   const ativo = Boolean(req.body?.ativo);
   const cliques = Number(req.body?.cliques);
   const minutos = Number(req.body?.minutos);
+  const escopo = req.body?.escopo === "todas" ? "todas" : "ativas";
   if (!Number.isInteger(cliques) || cliques < 2 || cliques > 100) {
     return res.status(400).json({ erro: "Número de cliques precisa ser um número inteiro entre 2 e 100." });
   }
   if (!Number.isInteger(minutos) || minutos < 1 || minutos > 1440) {
     return res.status(400).json({ erro: "Janela de tempo precisa ser um número inteiro entre 1 e 1440 minutos." });
   }
-  atualizarConfigBloqueioAuto(req.empresaId, { ativo, cliques, minutos });
+  atualizarConfigBloqueioAuto(req.empresaId, { ativo, cliques, minutos, escopo });
   res.json({ ok: true });
 });
 

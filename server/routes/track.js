@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { limitar, ipDe } from "../rateLimit.js";
 import { registrarClique, registrarDuracao } from "../tracking.js";
-import { buscarEmpresa } from "../db.js";
+import { buscarEmpresaPorTrackingToken } from "../db.js";
 
 export const trackPublicRouter = Router();
 
@@ -24,11 +24,11 @@ trackPublicRouter.post("/click", (req, res) => {
     return res.status(429).json({ erro: "Muitas requisições." });
   }
   const { empresa, codigo, gclid, fbclid, url, campanha } = req.body ?? {};
-  const empresaId = Number(empresa);
-  if (!empresaId || !buscarEmpresa(empresaId)) return res.status(400).json({ erro: "empresa inválida" });
+  const empresaEncontrada = buscarEmpresaPorTrackingToken(String(empresa ?? ""));
+  if (!empresaEncontrada) return res.status(400).json({ erro: "empresa inválida" });
   if (!codigo || !CODIGO_VALIDO.test(codigo)) return res.status(400).json({ erro: "código inválido" });
   registrarClique({
-    empresaId,
+    empresaId: empresaEncontrada.id,
     codigo: String(codigo).toUpperCase(),
     gclid: gclid ? String(gclid).slice(0, 200) : null,
     fbclid: fbclid ? String(fbclid).slice(0, 200) : null,
@@ -45,8 +45,10 @@ trackPublicRouter.post("/click/duracao", (req, res) => {
     return res.status(429).json({ erro: "Muitas requisições." });
   }
   const { empresa, codigo, duracao } = req.body ?? {};
-  const empresaId = Number(empresa);
-  if (!empresaId || !codigo || !CODIGO_VALIDO.test(codigo)) return res.status(400).json({ erro: "dados inválidos" });
-  registrarDuracao({ empresaId, codigo: String(codigo).toUpperCase(), duracao });
+  const empresaEncontrada = buscarEmpresaPorTrackingToken(String(empresa ?? ""));
+  if (!empresaEncontrada || !codigo || !CODIGO_VALIDO.test(codigo)) {
+    return res.status(400).json({ erro: "dados inválidos" });
+  }
+  registrarDuracao({ empresaId: empresaEncontrada.id, codigo: String(codigo).toUpperCase(), duracao });
   res.json({ ok: true });
 });

@@ -76,7 +76,13 @@ export default function BloqueioIp() {
     setErro("");
     setAvisoConfig("");
     try {
-      await api.configurarBloqueioAuto(empresaId, config.ativo, Number(config.cliques), Number(config.minutos));
+      await api.configurarBloqueioAuto(
+        empresaId,
+        config.ativo,
+        Number(config.cliques),
+        Number(config.minutos),
+        config.escopo,
+      );
       setAvisoConfig("Critério salvo.");
     } catch (e) {
       setErro(e.message);
@@ -159,6 +165,27 @@ export default function BloqueioIp() {
                 className="w-24 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              Aplicar exclusão em
+            </label>
+            <select
+              value={config.escopo}
+              onChange={(e) => setConfig({ ...config, escopo: e.target.value })}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="ativas">Somente campanhas ativas (recomendado)</option>
+              <option value="todas">Todas as campanhas vinculadas a essa empresa</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              "Todas" inclui campanhas pausadas também — útil se você reativa campanhas antigas de vez em quando e
+              quer que o bloqueio já valha pra elas.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
             <button
               type="submit"
               disabled={salvandoConfig}
@@ -166,7 +193,7 @@ export default function BloqueioIp() {
             >
               Salvar critério
             </button>
-            {(Number(config.cliques) === RECOMENDADO.cliques && Number(config.minutos) === RECOMENDADO.minutos) && (
+            {Number(config.cliques) === RECOMENDADO.cliques && Number(config.minutos) === RECOMENDADO.minutos && (
               <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 dark:bg-green-950/40 dark:text-green-400">
                 Recomendado
               </span>

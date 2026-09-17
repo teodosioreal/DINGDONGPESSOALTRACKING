@@ -1,5 +1,15 @@
 import { Router } from "express";
-import { criarEmpresa, listarEmpresas, apagarEmpresa, atualizarRegrasVenda, cliqueDeTesteRecebido } from "../db.js";
+import {
+  criarEmpresa,
+  listarEmpresas,
+  apagarEmpresa,
+  atualizarRegrasVenda,
+  cliqueDeTesteRecebido,
+  regenerarTrackingToken,
+  registrarSiteTestado,
+  listarSitesTestados,
+  removerSiteTestado,
+} from "../db.js";
 
 export const empresasRouter = Router();
 
@@ -37,4 +47,29 @@ empresaRouter.get("/tracking/verificar", (req, res) => {
   const marcador = String(req.query?.marcador ?? "").trim();
   if (!marcador) return res.status(400).json({ erro: "Marcador inválido." });
   res.json({ recebido: cliqueDeTesteRecebido(req.empresaId, marcador) });
+});
+
+/** Troca o código de instalação — o script com o código antigo para de mandar cliques. */
+empresaRouter.post("/tracking/regenerar-codigo", (req, res) => {
+  const trackingToken = regenerarTrackingToken(req.empresaId);
+  res.json({ ok: true, trackingToken });
+});
+
+/** Lista de sites onde o teste de instalação já deu certo — só organização, não afeta o rastreio. */
+empresaRouter.get("/tracking/sites", (req, res) => {
+  res.json({ sites: listarSitesTestados(req.empresaId) });
+});
+
+empresaRouter.post("/tracking/sites", (req, res) => {
+  const url = String(req.body?.url ?? "").trim();
+  if (!url) return res.status(400).json({ erro: "URL inválida." });
+  registrarSiteTestado(req.empresaId, url);
+  res.json({ ok: true });
+});
+
+empresaRouter.post("/tracking/sites/remover", (req, res) => {
+  const url = String(req.body?.url ?? "").trim();
+  if (!url) return res.status(400).json({ erro: "URL inválida." });
+  removerSiteTestado(req.empresaId, url);
+  res.json({ ok: true });
 });

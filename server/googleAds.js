@@ -7,7 +7,7 @@
  * login, se houver, ficam guardados por empresa em `google_conexoes`).
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { db } from "./db.js";
+import { db, buscarEmpresa } from "./db.js";
 
 const ESCOPO_ADS = "https://www.googleapis.com/auth/adwords";
 const ESCOPO_DATA_MANAGER = "https://www.googleapis.com/auth/datamanager";
@@ -322,12 +322,18 @@ export async function listarCampanhas(empresaId) {
   return { campanhas };
 }
 
-/** IDs das campanhas ATIVAS (ENABLED) da conta — usado pra aplicar a exclusão de IP em todas elas. */
-async function campanhasAtivas(token, developerToken, customerId, loginCustomerId) {
+/**
+ * IDs das campanhas da conta pra aplicar a exclusão de IP — o escopo é
+ * escolhido pela empresa (tela Bloqueio de IP): "ativas" pega só campanhas
+ * ENABLED; "todas" pega ENABLED + PAUSED (campanhas REMOVED de verdade são
+ * ignoradas nos dois casos — não faz sentido excluir IP de campanha apagada).
+ */
+async function campanhasParaExclusao(token, developerToken, customerId, loginCustomerId, escopo) {
+  const filtroStatus = escopo === "todas" ? "campaign.status IN ('ENABLED', 'PAUSED')" : "campaign.status = 'ENABLED'";
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
     method: "POST",
     headers: cabecalhos(token, developerToken, loginCustomerId),
-    body: JSON.stringify({ query: "SELECT campaign.id FROM campaign WHERE campaign.status = 'ENABLED'" }),
+    body: JSON.stringify({ query: `SELECT campaign.id FROM campaign WHERE ${filtroStatus}` }),
   });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) return { erro: mensagemAmigavel(d.error?.message, res.status) };
@@ -335,11 +341,12 @@ async function campanhasAtivas(token, developerToken, customerId, loginCustomerI
 }
 
 /**
- * Exclui um IP de todas as campanhas ATIVAS da conta do Google Ads conectada
- * dessa empresa — é o mecanismo de "clique suspeito" (bloqueio de IP),
- * totalmente separado do envio de conversão de venda: um IP bloqueado passa
- * a não ver/gastar clique nos seus anúncios, mas isso não tem nada a ver com
- * se uma venda específica é enviada ou não pro Google Ads.
+ * Exclui um IP das campanhas do Google Ads da empresa (todas, ou só as
+ * ativas — a empresa escolhe em Bloqueio de IP) — é o mecanismo de "clique
+ * suspeito" (bloqueio de IP), totalmente separado do envio de conversão de
+ * venda: um IP bloqueado passa a não ver/gastar clique nos seus anúncios,
+ * mas isso não tem nada a ver com se uma venda específica é enviada ou não
+ * pro Google Ads.
  *
  * Devolve os resourceNames dos critérios criados, pra poder remover se a
  * empresa desbloquear o IP depois. Best-effort: se a empresa ainda não
@@ -353,7 +360,8 @@ export async function excluirIpDasCampanhas(empresaId, ip) {
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const campanhas = await campanhasAtivas(auth.token, c.developerToken, customerId, loginCustomerId);
+  const escopo = buscarEmpresa(empresaId)?.bloqueio_auto_escopo === "todas" ? "todas" : "ativas";
+  const campanhas = await campanhasParaExclusao(auth.token, c.developerToken, customerId, loginCustomerId, escopo);
   if (campanhas.erro) return { ok: false, erro: campanhas.erro };
   if (campanhas.ids.length === 0) return { ok: true, resourceNames: [] };
 

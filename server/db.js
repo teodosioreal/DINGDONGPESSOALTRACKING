@@ -23,12 +23,14 @@ function criarSchema() {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
     webhook_secret TEXT NOT NULL UNIQUE,
+    tracking_token TEXT,
     palavras_chave TEXT NOT NULL DEFAULT '',
     confirmar_antes_de_enviar INTEGER NOT NULL DEFAULT 1,
     moeda TEXT NOT NULL DEFAULT 'BRL',
     bloqueio_auto_ativo INTEGER NOT NULL DEFAULT 1,
     bloqueio_auto_cliques INTEGER NOT NULL DEFAULT 5,
     bloqueio_auto_minutos INTEGER NOT NULL DEFAULT 5,
+    bloqueio_auto_escopo TEXT NOT NULL DEFAULT 'ativas',
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -97,6 +99,14 @@ function criarSchema() {
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_ips_bloqueados_empresa_ip ON ips_bloqueados(empresa_id, ip);
+
+  CREATE TABLE IF NOT EXISTS sites_testados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    testado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_testados_empresa_url ON sites_testados(empresa_id, url);
 
   CREATE TABLE IF NOT EXISTS mensagens (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,11 +211,21 @@ function migrarColunasNovas() {
   adicionarColuna("empresas", "bloqueio_auto_ativo", "INTEGER NOT NULL DEFAULT 1");
   adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
+  adicionarColuna("empresas", "bloqueio_auto_escopo", "TEXT NOT NULL DEFAULT 'ativas'");
+  adicionarColuna("empresas", "tracking_token", "TEXT");
   adicionarColuna("ips_bloqueados", "motivo", "TEXT");
   adicionarColuna("ips_bloqueados", "google_criterios", "TEXT");
   adicionarColuna("ips_bloqueados", "google_erro", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
+
+  // Empresas criadas antes do tracking_token existir não têm um valor ainda —
+  // gera um pra cada uma antes de criar o índice único (senão colide em NULL).
+  const semToken = db.prepare("SELECT id FROM empresas WHERE tracking_token IS NULL").all();
+  for (const e of semToken) {
+    db.prepare("UPDATE empresas SET tracking_token = ? WHERE id = ?").run(randomBytes(16).toString("hex"), e.id);
+  }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_empresas_tracking_token ON empresas(tracking_token);");
 }
 
 // A migração precisa rodar ANTES do criarSchema() definitivo: se o banco
@@ -223,9 +243,21 @@ function gerarSegredo() {
 
 export function criarEmpresa({ nome }) {
   const info = db
-    .prepare("INSERT INTO empresas (nome, webhook_secret) VALUES (?, ?)")
-    .run(String(nome ?? "").trim() || "Empresa sem nome", gerarSegredo());
+    .prepare("INSERT INTO empresas (nome, webhook_secret, tracking_token) VALUES (?, ?, ?)")
+    .run(String(nome ?? "").trim() || "Empresa sem nome", gerarSegredo(), gerarSegredo());
   return buscarEmpresa(info.lastInsertRowid);
+}
+
+export function buscarEmpresaPorTrackingToken(token) {
+  if (!token) return null;
+  return db.prepare("SELECT * FROM empresas WHERE tracking_token = ?").get(token) ?? null;
+}
+
+/** Troca o código de instalação (tracking_token) — o script antigo, com o token velho, para de funcionar. */
+export function regenerarTrackingToken(empresaId) {
+  const token = gerarSegredo();
+  db.prepare("UPDATE empresas SET tracking_token = ? WHERE id = ?").run(token, empresaId);
+  return token;
 }
 
 export function listarEmpresas() {
@@ -308,6 +340,24 @@ export function cliqueDeTesteRecebido(empresaId, marcador) {
   return Boolean(db.prepare("SELECT 1 FROM clicks WHERE empresa_id = ? AND gclid = ?").get(empresaId, marcador));
 }
 
+/* -------------------------------------------------------------- sites testados */
+
+/** Registra (ou atualiza a data) de um site onde o teste de instalação deu certo. */
+export function registrarSiteTestado(empresaId, url) {
+  db.prepare(
+    `INSERT INTO sites_testados (empresa_id, url) VALUES (?, ?)
+     ON CONFLICT(empresa_id, url) DO UPDATE SET testado_em = datetime('now')`,
+  ).run(empresaId, url);
+}
+
+export function listarSitesTestados(empresaId) {
+  return db.prepare("SELECT * FROM sites_testados WHERE empresa_id = ? ORDER BY testado_em DESC").all(empresaId);
+}
+
+export function removerSiteTestado(empresaId, url) {
+  db.prepare("DELETE FROM sites_testados WHERE empresa_id = ? AND url = ?").run(empresaId, url);
+}
+
 /** Quantos cliques vindos de anúncio (gclid/fbclid) esse IP fez nos últimos N minutos, nessa empresa. */
 export function contarCliquesRecentesDoIp(empresaId, ip, minutos) {
   return db
@@ -318,10 +368,12 @@ export function contarCliquesRecentesDoIp(empresaId, ip, minutos) {
     .get(empresaId, ip, `-${minutos} minutes`).n;
 }
 
-export function atualizarConfigBloqueioAuto(empresaId, { ativo, cliques, minutos }) {
+export function atualizarConfigBloqueioAuto(empresaId, { ativo, cliques, minutos, escopo }) {
   db.prepare(
-    "UPDATE empresas SET bloqueio_auto_ativo = ?, bloqueio_auto_cliques = ?, bloqueio_auto_minutos = ? WHERE id = ?",
-  ).run(ativo ? 1 : 0, cliques, minutos, empresaId);
+    `UPDATE empresas
+     SET bloqueio_auto_ativo = ?, bloqueio_auto_cliques = ?, bloqueio_auto_minutos = ?, bloqueio_auto_escopo = ?
+     WHERE id = ?`,
+  ).run(ativo ? 1 : 0, cliques, minutos, escopo === "todas" ? "todas" : "ativas", empresaId);
 }
 
 /** Visitas agrupadas por IP (mais recentes primeiro), pra tela de Bloqueio de IP. */

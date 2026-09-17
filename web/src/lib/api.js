@@ -29,6 +29,13 @@ export const api = {
     }),
   verificarTracking: (empresaId, marcador) =>
     chamar(`/api/empresas/${empresaId}/tracking/verificar?marcador=${encodeURIComponent(marcador)}`),
+  regenerarCodigoTracking: (empresaId) =>
+    chamar(`/api/empresas/${empresaId}/tracking/regenerar-codigo`, { method: "POST" }),
+  sitesTestados: (empresaId) => chamar(`/api/empresas/${empresaId}/tracking/sites`),
+  registrarSiteTestado: (empresaId, url) =>
+    chamar(`/api/empresas/${empresaId}/tracking/sites`, { method: "POST", body: { url } }),
+  removerSiteTestado: (empresaId, url) =>
+    chamar(`/api/empresas/${empresaId}/tracking/sites/remover`, { method: "POST", body: { url } }),
 
   dashboard: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/resumo`),
   checklist: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/checklist`),
@@ -86,6 +93,9 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/ip-bloqueio/bloquear`, { method: "POST", body: { ip } }),
   desbloquearIp: (empresaId, ip) =>
     chamar(`/api/empresas/${empresaId}/ip-bloqueio/desbloquear`, { method: "POST", body: { ip } }),
-  configurarBloqueioAuto: (empresaId, ativo, cliques, minutos) =>
-    chamar(`/api/empresas/${empresaId}/ip-bloqueio/config`, { method: "PUT", body: { ativo, cliques, minutos } }),
+  configurarBloqueioAuto: (empresaId, ativo, cliques, minutos, escopo) =>
+    chamar(`/api/empresas/${empresaId}/ip-bloqueio/config`, {
+      method: "PUT",
+      body: { ativo, cliques, minutos, escopo },
+    }),
 };
