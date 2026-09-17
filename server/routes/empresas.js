@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { criarEmpresa, listarEmpresas, apagarEmpresa, atualizarRegrasVenda } from "../db.js";
+import { criarEmpresa, listarEmpresas, apagarEmpresa, atualizarRegrasVenda, cliqueDeTesteRecebido } from "../db.js";
 
 export const empresasRouter = Router();
 
@@ -30,4 +30,11 @@ empresaRouter.put("/regras-venda", (req, res) => {
   const { palavrasChave, confirmarAntesDeEnviar } = req.body ?? {};
   atualizarRegrasVenda(req.empresaId, { palavrasChave, confirmarAntesDeEnviar });
   res.json({ ok: true });
+});
+
+/** Usado pelo botão "Testar instalação" da tela Instalar Rastreio — checa se o clique de teste chegou. */
+empresaRouter.get("/tracking/verificar", (req, res) => {
+  const marcador = String(req.query?.marcador ?? "").trim();
+  if (!marcador) return res.status(400).json({ erro: "Marcador inválido." });
+  res.json({ recebido: cliqueDeTesteRecebido(req.empresaId, marcador) });
 });

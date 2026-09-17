@@ -7,6 +7,18 @@ export const trackPublicRouter = Router();
 
 const CODIGO_VALIDO = /^[A-Z0-9]{6,10}$/i;
 
+// O pixel (t.js) roda no site do CLIENTE — domínio diferente do nosso — então
+// o navegador bloqueia o POST sem esses cabeçalhos de CORS (preflight OPTIONS
+// sem Access-Control-Allow-Origin). Só libera pra essas rotas públicas, que
+// não usam cookie/sessão nenhuma.
+trackPublicRouter.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 trackPublicRouter.post("/click", (req, res) => {
   if (!limitar(`click:${ipDe(req)}`, { max: 60, janelaMs: 60_000 })) {
     return res.status(429).json({ erro: "Muitas requisições." });

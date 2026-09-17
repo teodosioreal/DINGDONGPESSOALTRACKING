@@ -27,6 +27,8 @@ export const api = {
       method: "PUT",
       body: { palavrasChave, confirmarAntesDeEnviar },
     }),
+  verificarTracking: (empresaId, marcador) =>
+    chamar(`/api/empresas/${empresaId}/tracking/verificar?marcador=${encodeURIComponent(marcador)}`),
 
   dashboard: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/resumo`),
   checklist: (empresaId) => chamar(`/api/empresas/${empresaId}/dashboard/checklist`),

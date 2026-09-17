@@ -303,6 +303,11 @@ export function ipEstaBloqueado(empresaId, ip) {
   return Boolean(db.prepare("SELECT 1 FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").get(empresaId, ip));
 }
 
+/** Usado pelo botão "Testar instalação": o gclid de teste chegou como um clique de verdade? */
+export function cliqueDeTesteRecebido(empresaId, marcador) {
+  return Boolean(db.prepare("SELECT 1 FROM clicks WHERE empresa_id = ? AND gclid = ?").get(empresaId, marcador));
+}
+
 /** Quantos cliques vindos de anúncio (gclid/fbclid) esse IP fez nos últimos N minutos, nessa empresa. */
 export function contarCliquesRecentesDoIp(empresaId, ip, minutos) {
   return db
