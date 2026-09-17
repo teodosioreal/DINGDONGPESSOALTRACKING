@@ -11,16 +11,36 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: EVOLUTION_API_KEY
           script: |
             set -e
             git config --global --add safe.directory /var/www/dingdong
             cd /var/www/dingdong
             git fetch origin main
             git reset --hard origin/main
+
+            # Garante EVOLUTION_API_URL no .env (não sobrescreve se a pessoa já customizou).
+            grep -q '^EVOLUTION_API_URL=' .env || echo "EVOLUTION_API_URL=https://api.evolutiondingdong.online" >> .env
+
+            # Escreve/atualiza EVOLUTION_API_KEY no .env a partir do secret do GitHub
+            # (só se o secret estiver configurado — senão deixa o .env como já está).
+            if [ -n "$EVOLUTION_API_KEY" ]; then
+              if grep -q '^EVOLUTION_API_KEY=' .env; then
+                sed -i "s|^EVOLUTION_API_KEY=.*|EVOLUTION_API_KEY=$EVOLUTION_API_KEY|" .env
+              else
+                echo "EVOLUTION_API_KEY=$EVOLUTION_API_KEY" >> .env
+              fi
+            fi
+
+            # Remove as variáveis antigas da D-API, se ainda estiverem no .env.
+            sed -i '/^DAPI_BASE_URL=/d; /^DAPI_ACCOUNT_API_KEY=/d' .env
+
             npm install
             npm run build
             chown -R www-data:www-data /var/www/dingdong
