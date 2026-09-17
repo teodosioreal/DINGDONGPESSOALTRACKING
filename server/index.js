@@ -11,6 +11,7 @@ import { whatsappRouter, whatsappWebhookRouter } from "./routes/whatsapp.js";
 import { trackPublicRouter } from "./routes/track.js";
 import { conversasRouter, dashboardRouter } from "./routes/conversas.js";
 import { ipBloqueioRouter } from "./routes/ipBloqueio.js";
+import { vendasRouter } from "./routes/vendas.js";
 import { carregarEmpresa } from "./routes/empresaMiddleware.js";
 import { exigirSessao } from "./auth.js";
 import { iniciarAgendadorDeEnvio } from "./filaDeEnvio.js";
@@ -42,6 +43,7 @@ app.use("/api/empresas/:empresaId/whatsapp", exigirSessao, carregarEmpresa, what
 app.use("/api/empresas/:empresaId/conversas", exigirSessao, carregarEmpresa, conversasRouter);
 app.use("/api/empresas/:empresaId/dashboard", exigirSessao, carregarEmpresa, dashboardRouter);
 app.use("/api/empresas/:empresaId/ip-bloqueio", exigirSessao, carregarEmpresa, ipBloqueioRouter);
+app.use("/api/empresas/:empresaId/vendas", exigirSessao, carregarEmpresa, vendasRouter);
 
 // Frontend (build do Vite) — SPA: qualquer rota que não seja /api/* cai no index.html.
 const distDir = path.join(__dirname, "..", "web", "dist");

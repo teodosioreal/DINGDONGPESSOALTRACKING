@@ -49,7 +49,16 @@ export function formatarHorarioBrasilia(isoOuData) {
 export async function enviarVendaParaGoogleAds(conversa) {
   const empresa = buscarEmpresa(conversa.empresa_id);
   if (!empresa) return { ok: false, erro: "Empresa não encontrada." };
-  const r = await enviarConversaoGoogle(empresa.id, { gclid: conversa.gclid, valor: conversa.valor, moeda: empresa.moeda });
+  // Usa o horário real da venda (vendido_em), não o horário do envio — a
+  // conversão pode ficar horas na fila até 08h/20h, e o Google Ads espera o
+  // momento em que a conversão de fato aconteceu, não o do envio.
+  const quando = conversa.vendido_em ? new Date(conversa.vendido_em + "Z") : undefined;
+  const r = await enviarConversaoGoogle(empresa.id, {
+    gclid: conversa.gclid,
+    valor: conversa.valor,
+    moeda: empresa.moeda,
+    quando,
+  });
   marcarEnvioResultado(conversa.id, {
     enviada: r.ok,
     resposta: r.ok ? "Conversão enviada ao Google Ads." : r.erro,

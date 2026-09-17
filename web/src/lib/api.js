@@ -110,4 +110,8 @@ export const api = {
       method: "PUT",
       body: { ativo, cliques, minutos, escopo },
     }),
+
+  // ---- Vendas ----
+  vendas: (empresaId) => chamar(`/api/empresas/${empresaId}/vendas`),
+  testarConversao: (empresaId) => chamar(`/api/empresas/${empresaId}/vendas/testar-conversao`),
 };

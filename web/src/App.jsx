@@ -11,6 +11,7 @@ import Tracking from "./pages/Tracking.jsx";
 import Conversas from "./pages/Conversas.jsx";
 import RegrasVenda from "./pages/RegrasVenda.jsx";
 import BloqueioIp from "./pages/BloqueioIp.jsx";
+import Vendas from "./pages/Vendas.jsx";
 import Conta from "./pages/Conta.jsx";
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="empresas/:empresaId/tracking" element={<Tracking />} />
         <Route path="empresas/:empresaId/regras-venda" element={<RegrasVenda />} />
         <Route path="empresas/:empresaId/bloqueio-ip" element={<BloqueioIp />} />
+        <Route path="empresas/:empresaId/vendas" element={<Vendas />} />
       </Route>
       <Route path="*" element={<Navigate to={autenticado ? "/app" : "/login"} replace />} />
     </Routes>

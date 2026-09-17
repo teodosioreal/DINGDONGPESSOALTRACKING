@@ -126,11 +126,47 @@ export async function confirmarVenda(empresa, conversa, valor) {
   db.prepare(
     `UPDATE conversas
      SET status = 'vendido', valor = ?, valor_sugerido = NULL, conversao_enviada = 0, conversao_resposta = ?,
-         fila_status = ?, envio_agendado_para = ?, atualizado_em = datetime('now')
+         fila_status = ?, envio_agendado_para = ?, vendido_em = datetime('now'), atualizado_em = datetime('now')
      WHERE id = ?`,
   ).run(valor, respostaConversao, filaStatus, envioAgendadoPara, conversa.id);
 
   return { conversaoEnviada: false, respostaConversao };
+}
+
+/**
+ * Todas as vendas confirmadas da empresa, com e sem rastreio (gclid) — pra
+ * aba Vendas. `rastreada` é o que decide se a linha pode virar conversão no
+ * Google Ads (sem gclid não tem como importar, nem manual nem automático).
+ */
+export function listarTodasVendas(empresaId) {
+  const linhas = db
+    .prepare(
+      `SELECT id, nome, telefone, valor, gclid, campanha, fila_status, conversao_enviada, conversao_resposta,
+              vendido_em, criado_em
+       FROM conversas
+       WHERE empresa_id = ? AND status = 'vendido'
+       ORDER BY COALESCE(vendido_em, criado_em) DESC`,
+    )
+    .all(empresaId);
+  return linhas.map((v) => ({
+    id: v.id,
+    nome: v.nome,
+    telefone: v.telefone,
+    valor: v.valor,
+    gclid: v.gclid,
+    rastreada: Boolean(v.gclid),
+    campanha: v.campanha,
+    vendidoEm: v.vendido_em ?? v.criado_em,
+    statusEnvio: !v.gclid
+      ? "sem_rastreio"
+      : v.fila_status === "enviado"
+        ? "enviado"
+        : v.fila_status === "cancelado"
+          ? "cancelado"
+          : v.fila_status === "pendente"
+            ? "pendente"
+            : "nao_enviado",
+  }));
 }
 
 /** Vendas dessa empresa esperando na fila de envio, formatadas pra tela "Vendas para Envio". */

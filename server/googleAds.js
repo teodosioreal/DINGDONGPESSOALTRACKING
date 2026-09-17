@@ -13,7 +13,7 @@ const ESCOPO_ADS = "https://www.googleapis.com/auth/adwords";
 const ESCOPO_DATA_MANAGER = "https://www.googleapis.com/auth/datamanager";
 const ESCOPO_EMAIL = "openid email";
 const ESCOPOS = `${ESCOPO_ADS} ${ESCOPO_DATA_MANAGER} ${ESCOPO_EMAIL}`;
-const NOME_CONVERSAO = "LEADCONVERTIDO";
+export const NOME_CONVERSAO = "LEADCONVERTIDO";
 
 function versao() {
   return process.env.GOOGLE_ADS_API_VERSION ?? "v22";
@@ -271,7 +271,8 @@ export async function listarContas(empresaId) {
   for (const id of ids) {
     const info = await infoDaConta(auth.token, c.developerToken, id);
     if (info.deletada) continue;
-    contas.push({ customerId: id, nome: info.nome || `Conta ${id}`, isManager: info.isManager });
+    // Nunca usa o número como "nome" — o número já aparece separado, entre parênteses, no front.
+    contas.push({ customerId: id, nome: info.nome || "Conta sem nome cadastrado", isManager: info.isManager });
   }
   return { contas };
 }
@@ -325,7 +326,8 @@ export async function listarSubcontasDe(empresaId, mccId) {
   const contas = (d.results ?? [])
     .map((r) => ({
       customerId: limparId(r.customerClient?.id ?? ""),
-      nome: r.customerClient?.descriptiveName || `Conta ${r.customerClient?.id ?? ""}`,
+      // Nunca usa o número como "nome" — o número já aparece separado, entre parênteses, no front.
+      nome: r.customerClient?.descriptiveName || "Conta sem nome cadastrado",
       isManager: Boolean(r.customerClient?.manager),
     }))
     .filter((x) => x.customerId && x.customerId !== id);
@@ -543,7 +545,8 @@ async function acaoDeConversao(token, developerToken, customerId, loginCustomerI
     method: "POST",
     headers: cabecalhos(token, developerToken, loginCustomerId),
     body: JSON.stringify({
-      query: `SELECT conversion_action.id, conversion_action.resource_name
+      query: `SELECT conversion_action.id, conversion_action.resource_name, conversion_action.status,
+                conversion_action.type
               FROM conversion_action WHERE conversion_action.name = '${NOME_CONVERSAO}' LIMIT 1`,
     }),
   });
@@ -555,7 +558,33 @@ async function acaoDeConversao(token, developerToken, customerId, loginCustomerI
       erro: `Crie no Google Ads uma ação de conversão offline chamada "${NOME_CONVERSAO}" (importação de conversões offline) e tente de novo.`,
     };
   }
-  return { acaoId: String(acao.id) };
+  return { acaoId: String(acao.id), status: acao.status ?? "", tipo: acao.type ?? "" };
+}
+
+/**
+ * "Testar ação de conversão" — confirma que a ação LEADCONVERTIDO existe e
+ * está pronta pra receber conversões, SEM mandar nenhum evento fake pro
+ * Google Ads (não polui as métricas reais da conta). É um teste de
+ * configuração, não um teste de envio.
+ */
+export async function testarAcaoDeConversao(empresaId) {
+  const c = lerCredenciaisApp();
+  if (c.erro) return { ok: false, erro: c.erro };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken) return { ok: false, erro: "Conecte a conta do Google primeiro." };
+  if (!customerId) return { ok: false, erro: "Escolha a conta do Google Ads primeiro." };
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return { ok: false, erro: auth.erro };
+
+  const acao = await acaoDeConversao(auth.token, c.developerToken, customerId, loginCustomerId);
+  if (!acao.acaoId) return { ok: false, erro: acao.erro };
+  if (acao.status && acao.status !== "ENABLED") {
+    return {
+      ok: false,
+      erro: `A ação "${NOME_CONVERSAO}" existe, mas está com status ${acao.status} — reative ela no Google Ads (Ferramentas > Conversões).`,
+    };
+  }
+  return { ok: true, nome: NOME_CONVERSAO, status: acao.status, tipo: acao.tipo };
 }
 
 /**

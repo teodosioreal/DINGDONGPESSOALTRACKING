@@ -85,6 +85,7 @@ function criarSchema() {
     envio_agendado_para TEXT,
     fila_tentativas INTEGER NOT NULL DEFAULT 0,
     nao_lida INTEGER NOT NULL DEFAULT 0,
+    vendido_em TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -209,6 +210,7 @@ function migrarColunasNovas() {
   adicionarColuna("conversas", "envio_agendado_para", "TEXT");
   adicionarColuna("conversas", "fila_tentativas", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("conversas", "nao_lida", "INTEGER NOT NULL DEFAULT 0");
+  adicionarColuna("conversas", "vendido_em", "TEXT");
   adicionarColuna("empresas", "bloqueio_auto_ativo", "INTEGER NOT NULL DEFAULT 1");
   adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
