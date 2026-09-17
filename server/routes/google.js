@@ -6,9 +6,10 @@ import {
   emailDoAccessToken,
   statusConexaoReal,
   salvarConexao,
-  salvarContaEscolhida,
   desconectarGoogle,
-  limparContaEscolhida,
+  contasSelecionadasDe,
+  adicionarContaSelecionada,
+  removerContaSelecionada,
   listarContas,
   listarSubcontasDe,
   listarCampanhas,
@@ -24,8 +25,7 @@ googleRouter.get("/status", async (req, res) => {
   res.json({
     conectado: c.conectado,
     email: c.email,
-    customerId: c.customerId,
-    customerNome: c.customerNome,
+    contas: contasSelecionadasDe(req.empresaId),
     erro: c.erro ?? null,
   });
 });
@@ -55,23 +55,27 @@ googleRouter.get("/contas/:mccId/subcontas", async (req, res) => {
   res.json({ contas: r.contas });
 });
 
-googleRouter.post("/contas/escolher", (req, res) => {
+/** Contas que a empresa está monitorando — pode ser mais de uma. */
+googleRouter.get("/contas/selecionadas", (req, res) => {
+  res.json({ contas: contasSelecionadasDe(req.empresaId) });
+});
+
+googleRouter.post("/contas/selecionadas", (req, res) => {
   const { customerId, nome, loginCustomerId } = req.body ?? {};
   if (!customerId) return res.status(400).json({ erro: "customerId obrigatório." });
-  salvarContaEscolhida(req.empresaId, { customerId, nome, loginCustomerId });
+  adicionarContaSelecionada(req.empresaId, { customerId, nome, loginCustomerId });
   res.json({ ok: true });
 });
 
-/** "Trocar conta" — mantém o e-mail conectado, só limpa a conta escolhida pra reabrir o seletor. */
-googleRouter.post("/contas/trocar", (req, res) => {
-  limparContaEscolhida(req.empresaId);
+googleRouter.delete("/contas/selecionadas/:customerId", (req, res) => {
+  removerContaSelecionada(req.empresaId, req.params.customerId);
   res.json({ ok: true });
 });
 
 googleRouter.get("/campanhas", async (req, res) => {
   const r = await listarCampanhas(req.empresaId, req.query.periodo);
   if (r.erro) return res.status(400).json({ erro: r.erro });
-  res.json({ campanhas: r.campanhas });
+  res.json({ campanhas: r.campanhas, avisos: r.avisos });
 });
 
 /** Quais campanhas a empresa escolheu acompanhar — só essas entram nos insights do Painel. */
@@ -86,10 +90,12 @@ googleRouter.post("/campanhas/selecionadas", (req, res) => {
   res.json({ ok: true });
 });
 
-googleRouter.post("/campanhas/:campanhaId/status", async (req, res) => {
-  if (!/^\d+$/.test(req.params.campanhaId)) return res.status(400).json({ erro: "Campanha inválida." });
+googleRouter.post("/campanhas/:customerId/:campanhaId/status", async (req, res) => {
+  if (!/^\d+$/.test(req.params.customerId) || !/^\d+$/.test(req.params.campanhaId)) {
+    return res.status(400).json({ erro: "Conta ou campanha inválida." });
+  }
   const { ativar } = req.body ?? {};
-  const r = await definirStatusCampanha(req.empresaId, req.params.campanhaId, Boolean(ativar));
+  const r = await definirStatusCampanha(req.empresaId, req.params.customerId, req.params.campanhaId, Boolean(ativar));
   if (!r.ok) return res.status(400).json({ erro: r.erro });
   res.json({ ok: true });
 });

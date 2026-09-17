@@ -104,7 +104,7 @@ export default function Vendas() {
     setResultadoTeste(null);
     try {
       const r = await api.testarConversao(empresaId);
-      setResultadoTeste({ ok: true, mensagem: `Ação "${r.nome}" encontrada e pronta (status ${r.status}).` });
+      setResultadoTeste({ ok: r.ok, nome: r.nome, detalhes: r.detalhes ?? [] });
     } catch (e) {
       setResultadoTeste({ ok: false, mensagem: e.message });
     } finally {
@@ -160,15 +160,31 @@ export default function Vendas() {
         </button>
       </div>
       {resultadoTeste && (
-        <p
-          className={`rounded-md px-3 py-2 text-sm ${
+        <div
+          className={`space-y-1 rounded-md px-3 py-2 text-sm ${
             resultadoTeste.ok
               ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
               : "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400"
           }`}
         >
-          {resultadoTeste.ok ? "✅" : "❌"} {resultadoTeste.mensagem}
-        </p>
+          {resultadoTeste.mensagem ? (
+            <p>❌ {resultadoTeste.mensagem}</p>
+          ) : (
+            <>
+              <p>
+                {resultadoTeste.ok ? "✅" : "⚠️"} Ação "{resultadoTeste.nome}" testada em{" "}
+                {resultadoTeste.detalhes.length} conta(s):
+              </p>
+              <ul className="ml-4 list-disc">
+                {resultadoTeste.detalhes.map((d) => (
+                  <li key={d.customerId}>
+                    {d.nome || d.customerId}: {d.ok ? "✅ pronta" : `❌ ${d.erro}`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
       <p className="text-xs text-slate-400 dark:text-slate-500">
         O CSV serve como backup manual — suba em Google Ads &gt; Conversões &gt; Uploads. As vendas já enviadas

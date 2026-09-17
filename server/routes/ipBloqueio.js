@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { listarVisitasPorIp, listarIpsBloqueados, atualizarConfigBloqueioAuto } from "../db.js";
 import { bloquearIpComGoogleAds, desbloquearIpComGoogleAds } from "../ipBloqueio.js";
+import { metricasCampanhasSelecionadas } from "../googleAds.js";
 
 export const ipBloqueioRouter = Router({ mergeParams: true });
 
@@ -61,4 +62,15 @@ ipBloqueioRouter.post("/desbloquear", async (req, res) => {
   if (!ip) return res.status(400).json({ erro: "IP inválido." });
   const r = await desbloquearIpComGoogleAds(req.empresaId, ip);
   res.json({ ok: true, avisoGoogle: r.ok ? null : r.erro });
+});
+
+/** Card "Você economizou" — cliques inválidos × CPC médio, das campanhas monitoradas na aba Google Ads. */
+ipBloqueioRouter.get("/economia", async (req, res) => {
+  const r = await metricasCampanhasSelecionadas(req.empresaId, req.query.periodo);
+  res.json({
+    cliquesInvalidos: r.cliquesInvalidos,
+    economia: r.economia,
+    semSelecaoDeCampanhas: Boolean(r.semSelecao),
+    erroGoogle: r.erro ?? null,
+  });
 });

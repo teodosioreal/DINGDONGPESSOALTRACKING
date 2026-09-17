@@ -162,9 +162,6 @@ export function conexaoSalva(empresaId) {
   return {
     refreshToken: c?.refresh_token ?? null,
     email: c?.email ?? null,
-    customerId: c?.customer_id ?? null,
-    customerNome: c?.customer_nome ?? null,
-    loginCustomerId: c?.login_customer_id ?? undefined,
   };
 }
 
@@ -192,27 +189,37 @@ export function salvarConexao(empresaId, { refreshToken, email }) {
   ).run(empresaId, refreshToken, email || null);
 }
 
-/** `loginCustomerId` é a MCC usada como "conta de login" — só necessária quando a conta é subconta de uma MCC. */
-export function salvarContaEscolhida(empresaId, { customerId, nome, loginCustomerId }) {
-  db.prepare(
-    // Troca de conta zera as campanhas selecionadas — eram de outra conta, não fazem mais sentido aqui.
-    `UPDATE google_conexoes
-     SET customer_id = ?, customer_nome = ?, login_customer_id = ?, campanhas_selecionadas = NULL
-     WHERE empresa_id = ?`,
-  ).run(limparId(customerId), nome ?? null, limparId(loginCustomerId ?? "") || null, empresaId);
-}
-
 export function desconectarGoogle(empresaId) {
   db.prepare("DELETE FROM google_conexoes WHERE empresa_id = ?").run(empresaId);
+  db.prepare("DELETE FROM google_contas_selecionadas WHERE empresa_id = ?").run(empresaId);
 }
 
-/** Limpa só a conta escolhida (mantém o e-mail/refresh token conectado) — reabre a tela de escolher conta. */
-export function limparContaEscolhida(empresaId) {
+/** Contas do Google Ads que a empresa escolheu monitorar — podem ser várias. */
+export function contasSelecionadasDe(empresaId) {
+  return db
+    .prepare(
+      "SELECT customer_id, customer_nome, login_customer_id FROM google_contas_selecionadas WHERE empresa_id = ? ORDER BY criado_em ASC",
+    )
+    .all(empresaId)
+    .map((r) => ({ customerId: r.customer_id, nome: r.customer_nome, loginCustomerId: r.login_customer_id }));
+}
+
+/** `loginCustomerId` é a MCC usada como "conta de login" — só necessária quando a conta é subconta de uma MCC. */
+export function adicionarContaSelecionada(empresaId, { customerId, nome, loginCustomerId }) {
   db.prepare(
-    `UPDATE google_conexoes
-     SET customer_id = NULL, customer_nome = NULL, login_customer_id = NULL, campanhas_selecionadas = NULL
-     WHERE empresa_id = ?`,
-  ).run(empresaId);
+    `INSERT INTO google_contas_selecionadas (empresa_id, customer_id, customer_nome, login_customer_id)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(empresa_id, customer_id) DO UPDATE SET
+       customer_nome = excluded.customer_nome, login_customer_id = excluded.login_customer_id`,
+  ).run(empresaId, limparId(customerId), nome ?? null, limparId(loginCustomerId ?? "") || null);
+}
+
+/** Remove uma conta da lista de monitoradas — as campanhas dela somem dos insights e da tabela. */
+export function removerContaSelecionada(empresaId, customerId) {
+  db.prepare("DELETE FROM google_contas_selecionadas WHERE empresa_id = ? AND customer_id = ?").run(
+    empresaId,
+    limparId(customerId),
+  );
 }
 
 /** IDs das campanhas que a empresa escolheu acompanhar — só essas aparecem nos insights do Painel. */
@@ -347,106 +354,166 @@ function macroPeriodo(periodo) {
   return PERIODOS_VALIDOS[periodo] ?? "LAST_30_DAYS";
 }
 
+/**
+ * Campanhas de TODAS as contas que a empresa escolheu monitorar, agregadas
+ * numa lista só — cada campanha carrega de qual conta ela é (`customerId`/
+ * `customerNome`), já que o mesmo id de campanha pode existir em contas
+ * diferentes. Se uma conta falhar (token revogado, sem permissão etc.) as
+ * outras continuam aparecendo — o erro dela vem em `avisos`.
+ */
 export async function listarCampanhas(empresaId, periodo) {
   const c = lerCredenciaisApp();
   if (c.erro) return { campanhas: [], erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  const { refreshToken } = conexaoSalva(empresaId);
   if (!refreshToken) return { campanhas: [], erro: "Conecte a conta do Google primeiro." };
-  if (!customerId) return { campanhas: [], erro: "Escolha a conta do Google Ads primeiro." };
+  const contas = contasSelecionadasDe(empresaId);
+  if (contas.length === 0) return { campanhas: [], erro: "Selecione ao menos uma conta do Google Ads primeiro." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { campanhas: [], erro: auth.erro };
 
-  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
-    method: "POST",
-    headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
-    body: JSON.stringify({
-      query: `SELECT campaign.id, campaign.name, campaign.status, metrics.clicks, metrics.impressions,
-                metrics.average_cpc, metrics.cost_micros, metrics.conversions, metrics.cost_per_conversion,
-                metrics.invalid_clicks
-              FROM campaign
-              WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.status != 'REMOVED'`,
-    }),
-  });
-  const d = await res.json().catch(() => ({}));
-  if (!res.ok) return { campanhas: [], erro: mensagemAmigavel(d.error?.message, res.status) };
-
   const selecionadas = new Set(campanhasSelecionadasDe(empresaId));
-  const campanhas = (d.results ?? []).map((r) => ({
-    id: r.campaign?.id ?? "",
-    nome: r.campaign?.name ?? "",
-    status: r.campaign?.status ?? "",
-    cliques: Number(r.metrics?.clicks ?? 0),
-    impressoes: Number(r.metrics?.impressions ?? 0),
-    cpcMedio: Number(r.metrics?.averageCpc ?? 0) / 1_000_000,
-    custo: Number(r.metrics?.costMicros ?? 0) / 1_000_000,
-    conversoes: Number(r.metrics?.conversions ?? 0),
-    custoPorConversao: Number(r.metrics?.costPerConversion ?? 0) / 1_000_000,
-    cliquesInvalidos: Number(r.metrics?.invalidClicks ?? 0),
-    selecionada: selecionadas.has(String(r.campaign?.id ?? "")),
-  }));
-  return { campanhas };
+  const campanhas = [];
+  const avisos = [];
+
+  for (const conta of contas) {
+    const res = await fetch(
+      `https://googleads.googleapis.com/${versao()}/customers/${conta.customerId}/googleAds:search`,
+      {
+        method: "POST",
+        headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
+        body: JSON.stringify({
+          query: `SELECT campaign.id, campaign.name, campaign.status, metrics.clicks, metrics.impressions,
+                    metrics.average_cpc, metrics.cost_micros, metrics.conversions, metrics.cost_per_conversion,
+                    metrics.invalid_clicks
+                  FROM campaign
+                  WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.status != 'REMOVED'`,
+        }),
+      },
+    );
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      avisos.push(`${conta.nome || conta.customerId}: ${mensagemAmigavel(d.error?.message, res.status)}`);
+      continue;
+    }
+    for (const r of d.results ?? []) {
+      const campanhaId = String(r.campaign?.id ?? "");
+      campanhas.push({
+        id: campanhaId,
+        chave: `${conta.customerId}:${campanhaId}`,
+        customerId: conta.customerId,
+        customerNome: conta.nome,
+        nome: r.campaign?.name ?? "",
+        status: r.campaign?.status ?? "",
+        cliques: Number(r.metrics?.clicks ?? 0),
+        impressoes: Number(r.metrics?.impressions ?? 0),
+        cpcMedio: Number(r.metrics?.averageCpc ?? 0) / 1_000_000,
+        custo: Number(r.metrics?.costMicros ?? 0) / 1_000_000,
+        conversoes: Number(r.metrics?.conversions ?? 0),
+        custoPorConversao: Number(r.metrics?.costPerConversion ?? 0) / 1_000_000,
+        cliquesInvalidos: Number(r.metrics?.invalidClicks ?? 0),
+        selecionada: selecionadas.has(`${conta.customerId}:${campanhaId}`),
+      });
+    }
+  }
+  return { campanhas, avisos: avisos.length ? avisos : null };
 }
 
 /** Pausa ou reativa uma campanha direto pelo app. */
-export async function definirStatusCampanha(empresaId, campanhaId, ativar) {
+export async function definirStatusCampanha(empresaId, customerId, campanhaId, ativar) {
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
-  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const conta = contasSelecionadasDe(empresaId).find((x) => x.customerId === limparId(customerId));
+  if (!conta) return { ok: false, erro: "Essa conta não está mais entre as monitoradas." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaigns:mutate`, {
-    method: "POST",
-    headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
-    body: JSON.stringify({
-      operations: [
-        {
-          updateMask: "status",
-          update: {
-            resourceName: `customers/${customerId}/campaigns/${campanhaId}`,
-            status: ativar ? "ENABLED" : "PAUSED",
+  const res = await fetch(
+    `https://googleads.googleapis.com/${versao()}/customers/${conta.customerId}/campaigns:mutate`,
+    {
+      method: "POST",
+      headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
+      body: JSON.stringify({
+        operations: [
+          {
+            updateMask: "status",
+            update: {
+              resourceName: `customers/${conta.customerId}/campaigns/${campanhaId}`,
+              status: ativar ? "ENABLED" : "PAUSED",
+            },
           },
-        },
-      ],
-    }),
-  });
+        ],
+      }),
+    },
+  );
   const d = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
   return { ok: true };
 }
 
 /**
- * Soma cliques inválidos das campanhas que a empresa escolheu acompanhar,
- * pro card "Cliques Inválidos" do Painel. Se a empresa não selecionou
- * nenhuma campanha ainda, devolve zero sem erro (o Painel mostra um aviso
- * pedindo pra selecionar em vez de quebrar).
+ * Cliques inválidos + quanto isso "economizou" (o Google não cobra clique
+ * inválido — a economia estimada é cliques inválidos × CPC médio da mesma
+ * campanha) nas campanhas que a empresa escolheu acompanhar, somando todas
+ * as contas monitoradas. Usado no card "Cliques Inválidos" do Painel e no
+ * "Você economizou" do Bloqueio de IP. Sem nenhuma campanha selecionada,
+ * devolve zero sem erro (a tela mostra um aviso pedindo pra selecionar).
  */
-export async function cliquesInvalidosDasSelecionadas(empresaId, periodo) {
+export async function metricasCampanhasSelecionadas(empresaId, periodo) {
   const selecionadas = campanhasSelecionadasDe(empresaId);
-  if (selecionadas.length === 0) return { cliquesInvalidos: 0, semSelecao: true };
+  if (selecionadas.length === 0) return { cliquesInvalidos: 0, economia: 0, semSelecao: true };
 
   const c = lerCredenciaisApp();
-  if (c.erro) return { cliquesInvalidos: 0, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
-  if (!refreshToken || !customerId) return { cliquesInvalidos: 0, erro: "Google Ads não conectado nesta empresa." };
+  if (c.erro) return { cliquesInvalidos: 0, economia: 0, erro: c.erro };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { cliquesInvalidos: 0, economia: 0, erro: "Google Ads não conectado nesta empresa." };
   const auth = await obterAccessToken(refreshToken);
-  if (!auth.token) return { cliquesInvalidos: 0, erro: auth.erro };
+  if (!auth.token) return { cliquesInvalidos: 0, economia: 0, erro: auth.erro };
 
-  const idsEmLista = selecionadas.map((id) => `'${id}'`).join(",");
-  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
-    method: "POST",
-    headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
-    body: JSON.stringify({
-      query: `SELECT metrics.invalid_clicks FROM campaign
-              WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
-    }),
-  });
-  const d = await res.json().catch(() => ({}));
-  if (!res.ok) return { cliquesInvalidos: 0, erro: mensagemAmigavel(d.error?.message, res.status) };
+  // Agrupa as campanhas selecionadas (formato "customerId:campanhaId") por conta.
+  const porConta = new Map();
+  for (const chave of selecionadas) {
+    const [customerId, campanhaId] = String(chave).split(":");
+    if (!customerId || !campanhaId) continue;
+    if (!porConta.has(customerId)) porConta.set(customerId, []);
+    porConta.get(customerId).push(campanhaId);
+  }
+  if (porConta.size === 0) return { cliquesInvalidos: 0, economia: 0, semSelecao: true };
 
-  const total = (d.results ?? []).reduce((soma, r) => soma + Number(r.metrics?.invalidClicks ?? 0), 0);
-  return { cliquesInvalidos: total };
+  const contas = contasSelecionadasDe(empresaId);
+  let cliquesInvalidos = 0;
+  let economia = 0;
+  const avisos = [];
+
+  for (const [customerId, idsCampanhas] of porConta) {
+    const conta = contas.find((x) => x.customerId === customerId);
+    if (!conta) continue; // conta foi removida das monitoradas — ignora
+    const idsEmLista = idsCampanhas.map((id) => `'${id}'`).join(",");
+    const res = await fetch(
+      `https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`,
+      {
+        method: "POST",
+        headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
+        body: JSON.stringify({
+          query: `SELECT metrics.invalid_clicks, metrics.average_cpc FROM campaign
+                  WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
+        }),
+      },
+    );
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      avisos.push(`${conta.nome || customerId}: ${mensagemAmigavel(d.error?.message, res.status)}`);
+      continue;
+    }
+    for (const r of d.results ?? []) {
+      const invalidos = Number(r.metrics?.invalidClicks ?? 0);
+      const cpc = Number(r.metrics?.averageCpc ?? 0) / 1_000_000;
+      cliquesInvalidos += invalidos;
+      economia += invalidos * cpc;
+    }
+  }
+  return { cliquesInvalidos, economia, erro: avisos.length ? avisos.join("; ") : null };
 }
 
 /**
@@ -468,76 +535,113 @@ async function campanhasParaExclusao(token, developerToken, customerId, loginCus
 }
 
 /**
- * Exclui um IP das campanhas do Google Ads da empresa (todas, ou só as
- * ativas — a empresa escolhe em Bloqueio de IP) — é o mecanismo de "clique
- * suspeito" (bloqueio de IP), totalmente separado do envio de conversão de
- * venda: um IP bloqueado passa a não ver/gastar clique nos seus anúncios,
- * mas isso não tem nada a ver com se uma venda específica é enviada ou não
- * pro Google Ads.
+ * Exclui um IP das campanhas do Google Ads de TODAS as contas monitoradas
+ * pela empresa (todas as campanhas, ou só as ativas — a empresa escolhe em
+ * Bloqueio de IP) — é o mecanismo de "clique suspeito" (bloqueio de IP),
+ * totalmente separado do envio de conversão de venda: um IP bloqueado passa
+ * a não ver/gastar clique nos seus anúncios, mas isso não tem nada a ver
+ * com se uma venda específica é enviada ou não pro Google Ads.
  *
  * Devolve os resourceNames dos critérios criados, pra poder remover se a
- * empresa desbloquear o IP depois. Best-effort: se a empresa ainda não
- * conectou o Google Ads, devolve erro sem quebrar o bloqueio local do IP.
+ * empresa desbloquear o IP depois. Best-effort: se uma conta falhar (sem
+ * permissão etc.) as outras continuam, o erro dela vira aviso.
  */
 export async function excluirIpDasCampanhas(empresaId, ip) {
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
-  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const contas = contasSelecionadasDe(empresaId);
+  if (contas.length === 0) return { ok: false, erro: "Nenhuma conta do Google Ads sendo monitorada." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
   const escopo = buscarEmpresa(empresaId)?.bloqueio_auto_escopo === "todas" ? "todas" : "ativas";
-  const campanhas = await campanhasParaExclusao(auth.token, c.developerToken, customerId, loginCustomerId, escopo);
-  if (campanhas.erro) return { ok: false, erro: campanhas.erro };
-  if (campanhas.ids.length === 0) return { ok: true, resourceNames: [] };
+  const resourceNames = [];
+  const avisos = [];
 
-  const operations = campanhas.ids.map((id) => ({
-    create: {
-      campaign: `customers/${customerId}/campaigns/${id}`,
-      negative: true,
-      ipBlock: { ipAddress: ip },
-    },
-  }));
+  for (const conta of contas) {
+    const campanhas = await campanhasParaExclusao(
+      auth.token,
+      c.developerToken,
+      conta.customerId,
+      conta.loginCustomerId,
+      escopo,
+    );
+    if (campanhas.erro) {
+      avisos.push(`${conta.nome || conta.customerId}: ${campanhas.erro}`);
+      continue;
+    }
+    if (campanhas.ids.length === 0) continue;
 
-  const res = await fetch(
-    `https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaignCriteria:mutate`,
-    {
-      method: "POST",
-      headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
-      body: JSON.stringify({ operations, partialFailure: true }),
-    },
-  );
-  const d = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
+    const operations = campanhas.ids.map((id) => ({
+      create: {
+        campaign: `customers/${conta.customerId}/campaigns/${id}`,
+        negative: true,
+        ipBlock: { ipAddress: ip },
+      },
+    }));
 
-  const resourceNames = (d.results ?? []).map((r) => r.resourceName).filter(Boolean);
-  const avisoParcial = d.partialFailureError ? mensagemAmigavel(d.partialFailureError.message, res.status) : null;
-  return { ok: true, resourceNames, aviso: avisoParcial };
+    const res = await fetch(
+      `https://googleads.googleapis.com/${versao()}/customers/${conta.customerId}/campaignCriteria:mutate`,
+      {
+        method: "POST",
+        headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
+        body: JSON.stringify({ operations, partialFailure: true }),
+      },
+    );
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      avisos.push(`${conta.nome || conta.customerId}: ${mensagemAmigavel(d.error?.message, res.status)}`);
+      continue;
+    }
+    resourceNames.push(...(d.results ?? []).map((r) => r.resourceName).filter(Boolean));
+    if (d.partialFailureError) avisos.push(mensagemAmigavel(d.partialFailureError.message, res.status));
+  }
+
+  return { ok: true, resourceNames, aviso: avisos.length ? avisos.join("; ") : null };
 }
 
-/** Remove exclusões de IP criadas anteriormente pelas campanhas (desbloqueio). */
+/**
+ * Remove exclusões de IP criadas anteriormente (desbloqueio). Os
+ * resourceNames já carregam o id da conta embutido (formato
+ * "customers/{id}/campaignCriteria/..."), então agrupa por conta e manda um
+ * mutate de remoção por conta.
+ */
 export async function removerExclusaoIp(empresaId, resourceNames) {
   if (!resourceNames || resourceNames.length === 0) return { ok: true };
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
-  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const operations = resourceNames.map((resourceName) => ({ remove: resourceName }));
-  const res = await fetch(
-    `https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaignCriteria:mutate`,
-    {
-      method: "POST",
-      headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
-      body: JSON.stringify({ operations, partialFailure: true }),
-    },
-  );
-  const d = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
-  return { ok: true };
+  const porConta = new Map();
+  for (const rn of resourceNames) {
+    const m = /^customers\/(\d+)\//.exec(rn);
+    if (!m) continue;
+    if (!porConta.has(m[1])) porConta.set(m[1], []);
+    porConta.get(m[1]).push(rn);
+  }
+
+  const contas = contasSelecionadasDe(empresaId);
+  const avisos = [];
+  for (const [customerId, resourceNamesDaConta] of porConta) {
+    const conta = contas.find((x) => x.customerId === customerId);
+    const operations = resourceNamesDaConta.map((resourceName) => ({ remove: resourceName }));
+    const res = await fetch(
+      `https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaignCriteria:mutate`,
+      {
+        method: "POST",
+        headers: cabecalhos(auth.token, c.developerToken, conta?.loginCustomerId),
+        body: JSON.stringify({ operations, partialFailure: true }),
+      },
+    );
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) avisos.push(`${conta?.nome || customerId}: ${mensagemAmigavel(d.error?.message, res.status)}`);
+  }
+  return avisos.length ? { ok: false, erro: avisos.join("; ") } : { ok: true };
 }
 
 async function acaoDeConversao(token, developerToken, customerId, loginCustomerId) {
@@ -563,77 +667,108 @@ async function acaoDeConversao(token, developerToken, customerId, loginCustomerI
 
 /**
  * "Testar ação de conversão" — confirma que a ação LEADCONVERTIDO existe e
- * está pronta pra receber conversões, SEM mandar nenhum evento fake pro
- * Google Ads (não polui as métricas reais da conta). É um teste de
- * configuração, não um teste de envio.
+ * está pronta pra receber conversões em CADA conta monitorada, SEM mandar
+ * nenhum evento fake pro Google Ads (não polui as métricas reais). É um
+ * teste de configuração, não um teste de envio.
  */
 export async function testarAcaoDeConversao(empresaId) {
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  const { refreshToken } = conexaoSalva(empresaId);
   if (!refreshToken) return { ok: false, erro: "Conecte a conta do Google primeiro." };
-  if (!customerId) return { ok: false, erro: "Escolha a conta do Google Ads primeiro." };
+  const contas = contasSelecionadasDe(empresaId);
+  if (contas.length === 0) return { ok: false, erro: "Selecione ao menos uma conta do Google Ads primeiro." };
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const acao = await acaoDeConversao(auth.token, c.developerToken, customerId, loginCustomerId);
-  if (!acao.acaoId) return { ok: false, erro: acao.erro };
-  if (acao.status && acao.status !== "ENABLED") {
-    return {
-      ok: false,
-      erro: `A ação "${NOME_CONVERSAO}" existe, mas está com status ${acao.status} — reative ela no Google Ads (Ferramentas > Conversões).`,
-    };
+  const detalhes = [];
+  for (const conta of contas) {
+    const acao = await acaoDeConversao(auth.token, c.developerToken, conta.customerId, conta.loginCustomerId);
+    if (!acao.acaoId) {
+      detalhes.push({ customerId: conta.customerId, nome: conta.nome, ok: false, erro: acao.erro });
+    } else if (acao.status && acao.status !== "ENABLED") {
+      detalhes.push({
+        customerId: conta.customerId,
+        nome: conta.nome,
+        ok: false,
+        erro: `Ação existe, mas está com status ${acao.status} — reative em Ferramentas > Conversões.`,
+      });
+    } else {
+      detalhes.push({ customerId: conta.customerId, nome: conta.nome, ok: true });
+    }
   }
-  return { ok: true, nome: NOME_CONVERSAO, status: acao.status, tipo: acao.tipo };
+  return { ok: detalhes.every((d) => d.ok), nome: NOME_CONVERSAO, detalhes };
 }
 
 /**
- * Envia uma conversão offline (venda) pelo clique (gclid) pra conta conectada da empresa.
- * Usa a Data Manager API (events:ingest) — não pede token de desenvolvedor
- * pra esta chamada específica, só para a busca da ação de conversão acima.
+ * Envia uma conversão offline (venda) pelo clique (gclid) pra TODAS as
+ * contas monitoradas da empresa. Como o app não sabe de antemão em qual
+ * conta o clique original aconteceu, manda o mesmo evento pra cada uma —
+ * a Data Manager API só atribui de verdade na conta onde o gclid realmente
+ * existe (é assim que a importação de conversões offline sempre funcionou:
+ * validação/atribuição acontece depois, de forma assíncrona, então mandar
+ * pra conta errada não cria conversão nem gasto fantasma em lugar nenhum,
+ * só é ignorado). Considera sucesso se pelo menos uma conta aceitar.
  */
 export async function enviarConversaoGoogle(empresaId, { gclid, valor, moeda = "BRL", quando }) {
   const c = lerCredenciaisApp();
   if (c.erro) return { ok: false, erro: c.erro };
-  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  const { refreshToken } = conexaoSalva(empresaId);
   if (!refreshToken) return { ok: false, erro: "Conecte a conta do Google primeiro." };
-  if (!customerId) return { ok: false, erro: "Escolha a conta do Google Ads primeiro." };
+  const contas = contasSelecionadasDe(empresaId);
+  if (contas.length === 0) return { ok: false, erro: "Selecione ao menos uma conta do Google Ads primeiro." };
 
   const auth = await obterAccessToken(refreshToken);
   if (!auth.token) return { ok: false, erro: auth.erro };
 
-  const acao = await acaoDeConversao(auth.token, c.developerToken, customerId, loginCustomerId);
-  if (!acao.acaoId) return { ok: false, erro: acao.erro };
-
   const data = quando ?? new Date();
-  const destino = {
-    reference: "leadconvertido",
-    operatingAccount: { accountType: "GOOGLE_ADS", accountId: customerId },
-    productDestinationId: acao.acaoId,
-  };
-  if (loginCustomerId) destino.loginAccount = { accountType: "GOOGLE_ADS", accountId: loginCustomerId };
-  const payload = {
-    destinations: [destino],
-    events: [
-      {
-        destinationReferences: ["leadconvertido"],
-        adIdentifiers: { gclid },
-        eventTimestamp: data.toISOString(),
-        conversionValue: Number(valor) || 0,
-        currency: moeda,
-      },
-    ],
-  };
+  let algumSucesso = false;
+  const erros = [];
 
-  const res = await fetch("https://datamanager.googleapis.com/v1/events:ingest", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const resposta = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = resposta.error;
-    return { ok: false, erro: mensagemAmigavel(err?.message ?? err?.status, res.status) };
+  for (const conta of contas) {
+    const acao = await acaoDeConversao(auth.token, c.developerToken, conta.customerId, conta.loginCustomerId);
+    if (!acao.acaoId) {
+      erros.push(`${conta.nome || conta.customerId}: ${acao.erro}`);
+      continue;
+    }
+
+    const destino = {
+      reference: "leadconvertido",
+      operatingAccount: { accountType: "GOOGLE_ADS", accountId: conta.customerId },
+      productDestinationId: acao.acaoId,
+    };
+    if (conta.loginCustomerId) {
+      destino.loginAccount = { accountType: "GOOGLE_ADS", accountId: conta.loginCustomerId };
+    }
+    const payload = {
+      destinations: [destino],
+      events: [
+        {
+          destinationReferences: ["leadconvertido"],
+          adIdentifiers: { gclid },
+          eventTimestamp: data.toISOString(),
+          conversionValue: Number(valor) || 0,
+          currency: moeda,
+        },
+      ],
+    };
+
+    const res = await fetch("https://datamanager.googleapis.com/v1/events:ingest", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const resposta = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = resposta.error;
+      erros.push(`${conta.nome || conta.customerId}: ${mensagemAmigavel(err?.message ?? err?.status, res.status)}`);
+      continue;
+    }
+    algumSucesso = true;
   }
-  return { ok: true, resposta };
+
+  if (!algumSucesso) {
+    return { ok: false, erro: erros.join("; ") || "Não foi possível enviar em nenhuma conta monitorada." };
+  }
+  return { ok: true };
 }

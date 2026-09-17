@@ -44,6 +44,19 @@ function criarSchema() {
     campanhas_selecionadas TEXT
   );
 
+  -- Contas do Google Ads que a empresa escolheu monitorar (pode ser mais de
+  -- uma) — substitui o antigo modelo de "1 conta ativa" (customer_id acima,
+  -- mantido só por compatibilidade com bancos antigos).
+  CREATE TABLE IF NOT EXISTS google_contas_selecionadas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    customer_id TEXT NOT NULL,
+    customer_nome TEXT,
+    login_customer_id TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_google_contas_selecionadas ON google_contas_selecionadas(empresa_id, customer_id);
+
   CREATE TABLE IF NOT EXISTS whatsapp_conexoes (
     empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
     session_id TEXT,
@@ -230,6 +243,21 @@ function migrarColunasNovas() {
     db.prepare("UPDATE empresas SET tracking_token = ? WHERE id = ?").run(randomBytes(16).toString("hex"), e.id);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_empresas_tracking_token ON empresas(tracking_token);");
+
+  // Uma vez só: empresas que já tinham escolhido 1 conta no modelo antigo
+  // (google_conexoes.customer_id) migram pra virar a primeira conta
+  // monitorada no modelo novo (múltiplas contas). Gated por uma flag em
+  // `config` — sem isso, remover a última conta monitorada faria essa
+  // migração "reviver" a conta antiga no próximo restart do servidor.
+  if (!getConfig("migrou_contas_google_multiplas")) {
+    db.exec(`
+      INSERT OR IGNORE INTO google_contas_selecionadas (empresa_id, customer_id, customer_nome, login_customer_id)
+      SELECT empresa_id, customer_id, customer_nome, login_customer_id
+      FROM google_conexoes
+      WHERE customer_id IS NOT NULL AND customer_id != ''
+    `);
+    setConfig("migrou_contas_google_multiplas", "1");
+  }
 }
 
 // A migração precisa rodar ANTES do criarSchema() definitivo: se o banco

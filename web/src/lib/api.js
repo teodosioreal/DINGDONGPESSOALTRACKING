@@ -51,21 +51,23 @@ export const api = {
   googleStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/google/status`),
   googleAuthUrl: (empresaId) => chamar(`/api/empresas/${empresaId}/google/auth-url`),
   googleDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/google/desconectar`, { method: "POST" }),
-  googleTrocarConta: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas/trocar`, { method: "POST" }),
   googleContas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas`),
   googleSubcontas: (empresaId, mccId) => chamar(`/api/empresas/${empresaId}/google/contas/${mccId}/subcontas`),
-  googleEscolherConta: (empresaId, customerId, nome, loginCustomerId) =>
-    chamar(`/api/empresas/${empresaId}/google/contas/escolher`, {
+  googleContasMonitoradas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas/selecionadas`),
+  googleAdicionarConta: (empresaId, customerId, nome, loginCustomerId) =>
+    chamar(`/api/empresas/${empresaId}/google/contas/selecionadas`, {
       method: "POST",
       body: { customerId, nome, loginCustomerId },
     }),
+  googleRemoverConta: (empresaId, customerId) =>
+    chamar(`/api/empresas/${empresaId}/google/contas/selecionadas/${customerId}`, { method: "DELETE" }),
   googleCampanhas: (empresaId, periodo) =>
     chamar(`/api/empresas/${empresaId}/google/campanhas?periodo=${encodeURIComponent(periodo)}`),
   googleCampanhasSelecionadas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/campanhas/selecionadas`),
   googleSalvarCampanhasSelecionadas: (empresaId, ids) =>
     chamar(`/api/empresas/${empresaId}/google/campanhas/selecionadas`, { method: "POST", body: { ids } }),
-  googleDefinirStatusCampanha: (empresaId, campanhaId, ativar) =>
-    chamar(`/api/empresas/${empresaId}/google/campanhas/${campanhaId}/status`, {
+  googleDefinirStatusCampanha: (empresaId, customerId, campanhaId, ativar) =>
+    chamar(`/api/empresas/${empresaId}/google/campanhas/${customerId}/${campanhaId}/status`, {
       method: "POST",
       body: { ativar },
     }),
@@ -110,6 +112,8 @@ export const api = {
       method: "PUT",
       body: { ativo, cliques, minutos, escopo },
     }),
+  economiaIp: (empresaId, periodo) =>
+    chamar(`/api/empresas/${empresaId}/ip-bloqueio/economia?periodo=${encodeURIComponent(periodo)}`),
 
   // ---- Vendas ----
   vendas: (empresaId) => chamar(`/api/empresas/${empresaId}/vendas`),

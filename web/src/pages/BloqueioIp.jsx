@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { api } from "../lib/api.js";
+import PeriodoSelect from "../components/PeriodoSelect.jsx";
+
+function formatarMoeda(v, moeda) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(Number(v) || 0);
+}
 
 function formatarDuracao(segundos) {
   if (segundos == null) return "—";
@@ -33,6 +38,9 @@ export default function BloqueioIp() {
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState("");
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+  const [periodo, setPeriodo] = useState("30dias");
+  const [economia, setEconomia] = useState(null);
+  const [moeda, setMoeda] = useState("BRL");
 
   async function carregar() {
     try {
@@ -49,7 +57,19 @@ export default function BloqueioIp() {
   useEffect(() => {
     setCarregando(true);
     carregar();
+    api
+      .empresa(empresaId)
+      .then((r) => setMoeda(r.empresa.moeda || "BRL"))
+      .catch(() => {});
   }, [empresaId]);
+
+  useEffect(() => {
+    setEconomia(null);
+    api
+      .economiaIp(empresaId, periodo)
+      .then(setEconomia)
+      .catch(() => {});
+  }, [empresaId, periodo]);
 
   async function alternarBloqueio(ip, bloqueadoAtualmente) {
     setProcessando(ip);
@@ -93,15 +113,45 @@ export default function BloqueioIp() {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Bloqueio de IP</h1>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Todo visitante que passa pelo script de rastreio aparece aqui com o IP, se veio de um anúncio e quanto
-          tempo ficou no site. Bloquear um IP é pra clique suspeito (ex: concorrente clicando repetido no seu
-          anúncio) — o IP é excluído de todas as campanhas ativas da sua conta do Google Ads, pra parar de gastar
-          seu orçamento com ele. Isso é <strong>independente</strong> do envio de conversão de venda: uma venda
-          confirmada sempre é enviada normalmente pro Google Ads, IP bloqueado ou não — são dois mecanismos que não
-          se misturam.
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Bloqueio de IP</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Todo visitante que passa pelo script de rastreio aparece aqui com o IP, se veio de um anúncio e quanto
+            tempo ficou no site. Bloquear um IP é pra clique suspeito (ex: concorrente clicando repetido no seu
+            anúncio) — o IP é excluído das campanhas do Google Ads, pra parar de gastar seu orçamento com ele.
+            Isso é <strong>independente</strong> do envio de conversão de venda: uma venda confirmada sempre é
+            enviada normalmente pro Google Ads, IP bloqueado ou não — são dois mecanismos que não se misturam.
+          </p>
+        </div>
+        <PeriodoSelect valor={periodo} onChange={setPeriodo} />
+      </div>
+
+      <div className="rounded-lg border border-green-200 bg-green-50 p-5 dark:border-green-900 dark:bg-green-950/30">
+        <p className="text-sm text-green-800 dark:text-green-400">Você economizou</p>
+        {economia?.semSelecaoDeCampanhas ? (
+          <p className="mt-1 text-sm text-green-800 dark:text-green-400">
+            Selecione quais campanhas acompanhar na{" "}
+            <Link to={`/app/empresas/${empresaId}/google-ads`} className="font-medium underline">
+              aba Google Ads
+            </Link>{" "}
+            pra ver esse número.
+          </p>
+        ) : economia?.erroGoogle ? (
+          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{economia.erroGoogle}</p>
+        ) : (
+          <>
+            <p className="mt-1 text-2xl font-semibold tracking-tight text-green-900 dark:text-green-300">
+              {economia ? formatarMoeda(economia.economia, moeda) : "…"}
+            </p>
+            <p className="mt-1 text-xs text-green-700 dark:text-green-500">
+              {economia ? economia.cliquesInvalidos : "…"} cliques inválidos que o Google não cobrou, no período
+              selecionado, × o CPC médio de cada campanha.
+            </p>
+          </>
+        )}
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          Esses números são só das campanhas e contas que você escolheu monitorar na aba Google Ads.
         </p>
       </div>
 
