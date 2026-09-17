@@ -506,7 +506,19 @@ export async function metricasCampanhasSelecionadas(empresaId, periodo) {
         method: "POST",
         headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
         body: JSON.stringify({
-          query: `SELECT metrics.invalid_clicks, metrics.average_cpc FROM campaign
+          // campaign.id + segments.date no SELECT são essenciais aqui: sem
+          // eles, o Google Ads devolve o average_cpc já recalculado como a
+          // média do PERÍODO INTEIRO (ou de todas as campanhas misturadas
+          // num mesmo dia) — e multiplicar isso pelo total de cliques
+          // inválidos pode dar um número menor num período maior (se o CPC
+          // médio histórico for mais baixo que o recente), o que não pode
+          // acontecer pro usuário ("todo período" tem que ser sempre >= que
+          // qualquer recorte menor dele). Pedindo um valor por campanha por
+          // dia e somando cliques_invalidos × cpc_médio de cada linha, a
+          // soma de "todo período" nunca fica menor que a de um recorte
+          // mais curto — cada linha é uma parcela não-negativa somada à
+          // mesma soma, nunca substitui outra.
+          query: `SELECT campaign.id, segments.date, metrics.invalid_clicks, metrics.average_cpc FROM campaign
                   WHERE ${clausulaPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
         }),
       },
