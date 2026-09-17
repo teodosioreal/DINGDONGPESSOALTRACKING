@@ -127,8 +127,8 @@ export default function WhatsApp() {
       {!configurado && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
-            Cria a sessão na D-API automaticamente, já com o nome desta empresa e o webhook configurado — sem
-            precisar entrar no painel da D-API.
+            Cria a sessão na nossa Evolution API automaticamente, já com o nome desta empresa e o webhook configurado —
+            sem precisar entrar no painel da Evolution API.
           </p>
           <div className="flex items-center gap-3">
             <button

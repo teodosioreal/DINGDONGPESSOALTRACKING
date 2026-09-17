@@ -1,24 +1,31 @@
 /**
- * Cliente da D-API para as instâncias de WhatsApp — multi-empresa.
+ * Cliente da nossa Evolution API (self-hosted) para as instâncias de
+ * WhatsApp — multi-empresa.
  *
- * Cada empresa tem seu próprio Session ID + API Key (tabela
- * `whatsapp_conexoes`), configurados na tela WhatsApp daquela empresa.
+ * Cada empresa tem sua própria instância (tabela `whatsapp_conexoes`:
+ * session_id = nome da instância na Evolution API, api_key = apikey usada
+ * pra autenticar as chamadas dela), configuradas na tela WhatsApp daquela
+ * empresa — manualmente ou pelo botão "Criar sessão automaticamente".
  *
- * Endpoints confirmados na documentação oficial (docs.d-api.cloud):
- *  - GET /api/v1/sessions/{id}/qr       → status da sessão + QR Code atual
- *  - GET /api/v1/sessions/{id}/connect  → força reconexão (quando o QR expira)
- * Os demais (/pairing-code, /disconnect, /send-text) ainda são um chute
- * baseado no padrão da API — confirme na documentação se algo der 404.
+ * Endpoints usados (Evolution API v2, autenticação via header `apikey`):
+ *  - GET  /instance/connectionState/{name}      → status da conexão
+ *  - GET  /instance/connect/{name}               → QR Code (campo base64)
+ *  - GET  /instance/connect/{name}?number=...    → código de pareamento
+ *  - DELETE /instance/logout/{name}              → desconecta a sessão
+ *  - POST /message/sendText/{name}               → envia mensagem de texto
+ *  - POST /instance/create                        → cria instância nova
+ *  - POST /webhook/set/{name}                     → configura o webhook dela
  *
- * Webhook inbound (messages.received) confirmado na documentação: o
- * telefone vem em data.from.jid (ex: "5511999999999@s.whatsapp.net"), o
- * texto em data.message, nome do remetente em data.from_name, e is_group /
- * fromMe como booleanos — ver normalizarPayloadInbound() abaixo.
+ * Webhook inbound (messages.upsert): o telefone vem em
+ * data.key.remoteJid (ex: "5511999999999@s.whatsapp.net"), o texto em
+ * data.message.conversation (ou extendedTextMessage.text/legendas de
+ * mídia), nome do remetente em data.pushName, e data.key.fromMe indica se
+ * fomos nós que mandamos — ver normalizarPayloadInbound() abaixo.
  */
 import { db } from "./db.js";
 
-const BASE = (process.env.DAPI_BASE_URL ?? "https://api.d-api.cloud").replace(/\/$/, "");
-const DAPI_ACCOUNT_API_KEY = process.env.DAPI_ACCOUNT_API_KEY ?? "";
+const BASE = (process.env.EVOLUTION_API_URL ?? "https://api.evolutiondingdong.online").replace(/\/$/, "");
+const EVOLUTION_ACCOUNT_API_KEY = process.env.EVOLUTION_API_KEY ?? "";
 
 function slugificar(texto) {
   const limpo = String(texto ?? "")
@@ -54,118 +61,92 @@ export function limparCredenciais(empresaId) {
 
 function faltaConfigurar(empresaId) {
   if (!credenciaisConfiguradas(empresaId)) {
-    return "Preencha o Session ID e a API Key da D-API na tela do WhatsApp desta empresa.";
+    return "Preencha o Instance Name e a API Key da Evolution API na tela do WhatsApp desta empresa.";
   }
   return null;
 }
 
 async function chamar(empresaId, caminho, init) {
-  const { sessionId, apiKey } = credenciaisSalvas(empresaId);
-  const url = `${BASE}/api/v1/sessions/${sessionId}${caminho}`;
+  const { apiKey } = credenciaisSalvas(empresaId);
+  const url = `${BASE}${caminho}`;
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", Authorization: apiKey, ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", apikey: apiKey, ...(init?.headers ?? {}) },
   });
   const dados = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, dados };
 }
 
-/** Consulta bruta ao endpoint /qr — é ele quem informa o status da sessão também. */
-async function consultarQr(empresaId) {
-  return chamar(empresaId, "/qr");
-}
-
-function esperar(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Consulta o status atual da conexão dessa instância. */
+async function consultarStatus(empresaId, sessionId) {
+  return chamar(empresaId, `/instance/connectionState/${encodeURIComponent(sessionId)}`);
 }
 
 export async function statusConexao(empresaId) {
   const erro = faltaConfigurar(empresaId);
   if (erro) return { configurado: false, conectado: false, erro };
-  const r = await consultarQr(empresaId);
+  const { sessionId } = credenciaisSalvas(empresaId);
+  const r = await consultarStatus(empresaId, sessionId);
   if (!r.ok) return { configurado: true, conectado: false, erro: "Não foi possível consultar o status da sessão." };
-  return { configurado: true, conectado: r.dados?.status === "connected" };
+  return { configurado: true, conectado: r.dados?.instance?.state === "open" };
 }
 
-const POLL_INTERVALO_MS = 5000;
-const POLL_MAX_TENTATIVAS = 5; // ~25s esperando o QR novo depois do /connect
-
 /**
- * Devolve o QR Code atual pra escanear. Se o código já tiver expirado,
- * chama /connect UMA VEZ pra gerar um novo e faz polling em /qr a cada 5s
- * até ele atualizar (conforme a documentação da D-API) antes de devolver —
- * assim o front, que também faz polling a cada 5s, não acaba disparando um
- * /connect novo a cada chamada e resetando o QR sem ele nunca estabilizar.
+ * Devolve o QR Code atual pra escanear. A Evolution API já devolve o QR
+ * pronto (campo base64, formato data URL) na própria chamada de connect —
+ * sem precisar de polling separado.
  */
 export async function gerarQrCode(empresaId) {
   const erro = faltaConfigurar(empresaId);
   if (erro) return { erro };
 
-  let r = await consultarQr(empresaId);
-  if (!r.ok) return { erro: "Não foi possível consultar o QR Code agora." };
+  const { sessionId } = credenciaisSalvas(empresaId);
+  const status = await consultarStatus(empresaId, sessionId);
+  if (status.ok && status.dados?.instance?.state === "open") return { conectado: true };
 
-  if (r.dados?.status === "connected") return { conectado: true };
+  const r = await chamar(empresaId, `/instance/connect/${encodeURIComponent(sessionId)}`);
+  if (!r.ok) return { erro: "Não foi possível gerar o QR Code agora." };
+  if (r.dados?.instance?.state === "open") return { conectado: true };
 
-  if (r.dados?.expired) {
-    const reconectar = await chamar(empresaId, "/connect");
-    if (!reconectar.ok) return { erro: "Não foi possível reconectar a sessão agora." };
-
-    for (let tentativa = 0; tentativa < POLL_MAX_TENTATIVAS; tentativa += 1) {
-      await esperar(POLL_INTERVALO_MS);
-      r = await consultarQr(empresaId);
-      if (!r.ok) return { erro: "Não foi possível gerar um novo QR Code agora." };
-      if (r.dados?.status === "connected" || !r.dados?.expired) break;
-    }
-  }
-
-  if (r.dados?.status === "connected") return { conectado: true };
-  return { imagemBase64: r.dados?.qrCodeImage, conectado: false };
+  return { imagemBase64: r.dados?.base64 ?? null, conectado: false };
 }
 
 /**
- * Cria a sessão da D-API automaticamente (nome baseado na empresa) e já
- * configura o webhook dela — assim não precisa mais entrar no painel da
- * D-API pra conectar um cliente novo. Confirmado no OpenAPI oficial:
- * POST /api/v1/sessions, autenticado com a MESMA chave de API da conta (o
- * schema declara um único ApiKeyAuth global pra toda a API, sem chave por
- * sessão) — por isso essa mesma chave é salva como "apiKey" da empresa.
+ * Cria a instância na Evolution API automaticamente (nome baseado na
+ * empresa) e já configura o webhook dela — assim não precisa mais entrar no
+ * painel da Evolution API pra conectar um cliente novo.
  */
 export async function criarSessaoAutomatica(empresa) {
-  if (!DAPI_ACCOUNT_API_KEY) {
-    return { erro: "Falta configurar DAPI_ACCOUNT_API_KEY no .env do servidor pra criar sessões automaticamente." };
+  if (!EVOLUTION_ACCOUNT_API_KEY) {
+    return { erro: "Falta configurar EVOLUTION_API_KEY no .env do servidor pra criar sessões automaticamente." };
   }
   const sessionId = `${slugificar(empresa.nome)}-${empresa.id}`;
   const webhookUrl = `${process.env.APP_PUBLIC_URL}/api/public/whatsapp/webhook?empresa=${empresa.id}&chave=${empresa.webhook_secret}`;
 
-  const res = await fetch(`${BASE}/api/v1/sessions`, {
+  const criar = await fetch(`${BASE}/instance/create`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: DAPI_ACCOUNT_API_KEY },
-    body: JSON.stringify({
-      sessionId,
-      type: "unofficial",
-      webhookUrl,
-      // O campo "webhookUrl" sozinho não ativa a entrega — a D-API exige
-      // webhookConfig.enabled=true (confirmado no OpenAPI oficial), senão a
-      // sessão fica criada com o webhook desligado por padrão.
-      webhookConfig: {
-        enabled: true,
-        type: "single",
-        events: {
-          "messages.received": { enabled: true, webhookUrl },
-        },
-      },
-      connectionMode: "qr",
-      ignoreGroups: true,
-      ignoreStatus: true,
-      historySync: false,
-    }),
+    headers: { "Content-Type": "application/json", apikey: EVOLUTION_ACCOUNT_API_KEY },
+    body: JSON.stringify({ instanceName: sessionId, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
   });
-  if (!res.ok) {
-    const corpo = await res.json().catch(() => ({}));
-    return { erro: corpo?.message ?? `Não foi possível criar a sessão na D-API (status ${res.status}).` };
+  if (!criar.ok) {
+    const corpo = await criar.json().catch(() => ({}));
+    const mensagem = Array.isArray(corpo?.response?.message) ? corpo.response.message[0] : corpo?.message;
+    return { erro: mensagem ?? `Não foi possível criar a sessão na Evolution API (status ${criar.status}).` };
   }
 
-  salvarCredenciais(empresa.id, { sessionId, apiKey: DAPI_ACCOUNT_API_KEY });
+  const webhook = await fetch(`${BASE}/webhook/set/${encodeURIComponent(sessionId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: EVOLUTION_ACCOUNT_API_KEY },
+    body: JSON.stringify({
+      webhook: { enabled: true, url: webhookUrl, byEvents: false, events: ["MESSAGES_UPSERT"] },
+    }),
+  });
+  if (!webhook.ok) {
+    salvarCredenciais(empresa.id, { sessionId, apiKey: EVOLUTION_ACCOUNT_API_KEY });
+    return { erro: "Sessão criada, mas não foi possível configurar o webhook automaticamente. Gere o QR Code e tente reconectar depois." };
+  }
+
+  salvarCredenciais(empresa.id, { sessionId, apiKey: EVOLUTION_ACCOUNT_API_KEY });
   return { ok: true, sessionId };
 }
 
@@ -174,15 +155,19 @@ export async function gerarCodigoPareamento(empresaId, telefone) {
   if (erro) return { erro };
   const numero = (telefone ?? "").replace(/\D/g, "");
   if (!numero) return { erro: "Informe o telefone com DDI (ex: 5511999999999)." };
-  const r = await chamar(empresaId, "/pairing-code", { method: "POST", body: JSON.stringify({ phone: numero }) });
+  const { sessionId } = credenciaisSalvas(empresaId);
+  const r = await chamar(empresaId, `/instance/connect/${encodeURIComponent(sessionId)}?number=${numero}`);
   if (!r.ok) return { erro: "Não foi possível gerar o código de pareamento agora." };
-  return { codigo: r.dados?.code };
+  const codigo = r.dados?.pairingCode ?? r.dados?.code;
+  if (!codigo) return { erro: "A Evolution API não devolveu um código de pareamento agora." };
+  return { codigo };
 }
 
 export async function desconectar(empresaId) {
   const erro = faltaConfigurar(empresaId);
   if (erro) return { erro };
-  const r = await chamar(empresaId, "/disconnect", { method: "POST" });
+  const { sessionId } = credenciaisSalvas(empresaId);
+  const r = await chamar(empresaId, `/instance/logout/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
   return { ok: r.ok };
 }
 
@@ -190,9 +175,10 @@ export async function enviarMensagem(empresaId, telefone, mensagem) {
   const erro = faltaConfigurar(empresaId);
   if (erro) return { ok: false, erro };
   const numero = (telefone ?? "").replace(/\D/g, "");
-  const r = await chamar(empresaId, "/send-text", {
+  const { sessionId } = credenciaisSalvas(empresaId);
+  const r = await chamar(empresaId, `/message/sendText/${encodeURIComponent(sessionId)}`, {
     method: "POST",
-    body: JSON.stringify({ phone: numero, message: mensagem }),
+    body: JSON.stringify({ number: numero, text: mensagem }),
   });
   if (!r.ok) return { ok: false, erro: "Falha ao enviar a mensagem." };
   return { ok: true };
@@ -217,20 +203,24 @@ export function empresaDoWebhook(req) {
 }
 
 /**
- * Normaliza o payload do webhook messages.received da D-API (confirmado na
- * documentação oficial). Outros eventos (connection.status, chats.upsert etc.)
- * chegam na mesma URL quando o modo é "single" — são ignorados aqui.
+ * Normaliza o payload do webhook messages.upsert da Evolution API. Outros
+ * eventos (connection.update, chats.upsert etc.) podem chegar na mesma URL
+ * quando o webhook não está filtrado por evento — são ignorados aqui.
  */
 export function normalizarPayloadInbound(bruto) {
   const cru = bruto ?? {};
-  if (cru.event && cru.event !== "messages.received") {
+  if (cru.event && cru.event !== "messages.upsert") {
     return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined };
   }
   const dado = typeof cru.data === "object" && cru.data ? cru.data : cru;
-  const telefone = String(dado.from?.jid ?? "").split("@")[0].replace(/\D/g, "");
-  const texto = String(dado.message ?? "");
-  const deMim = dado.fromMe === true;
-  const grupo = dado.is_group === true;
-  const nome = dado.from_name ?? dado.from?.name ?? undefined;
+  const remoteJid = String(dado.key?.remoteJid ?? "");
+  const grupo = remoteJid.endsWith("@g.us");
+  const telefone = remoteJid.split("@")[0].replace(/\D/g, "");
+  const msg = dado.message ?? {};
+  const texto = String(
+    msg.conversation ?? msg.extendedTextMessage?.text ?? msg.imageMessage?.caption ?? msg.videoMessage?.caption ?? "",
+  );
+  const deMim = dado.key?.fromMe === true;
+  const nome = dado.pushName ?? undefined;
   return { telefone, texto, deMim, grupo, nome };
 }

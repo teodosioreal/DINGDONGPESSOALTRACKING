@@ -20,7 +20,7 @@ whatsappRouter.get("/status", async (req, res) => {
   res.json(await statusConexao(req.empresaId));
 });
 
-/** Session ID e API Key da D-API, preenchidos na própria tela do painel. */
+/** Instance Name e API Key da Evolution API, preenchidos na própria tela do painel. */
 whatsappRouter.get("/credenciais", (req, res) => {
   const { sessionId, apiKey } = credenciaisSalvas(req.empresaId);
   res.json({ sessionId: sessionId ?? "", temApiKey: Boolean(apiKey) });
@@ -38,7 +38,7 @@ whatsappRouter.post("/credenciais/remover", (req, res) => {
   res.json({ ok: true });
 });
 
-/** Cria a sessão na D-API automaticamente (nome da empresa + webhook já configurado). */
+/** Cria a sessão na Evolution API automaticamente (nome da empresa + webhook já configurado). */
 whatsappRouter.post("/criar-sessao-automatica", async (req, res) => {
   const r = await criarSessaoAutomatica(req.empresa);
   if (r.erro) return res.status(400).json({ erro: r.erro });
@@ -64,10 +64,11 @@ whatsappRouter.post("/desconectar", async (req, res) => {
 });
 
 /**
- * Webhook PÚBLICO — configure esta URL no painel da D-API (uma por empresa)
- * como "Ao receber": https://SEUDOMINIO/api/public/whatsapp/webhook?empresa=ID&chave=SEGREDO
+ * Webhook PÚBLICO — configurado automaticamente na Evolution API pelo botão
+ * "Criar sessão automaticamente" (ou cole manualmente lá, se preferir), uma
+ * URL por empresa: https://SEUDOMINIO/api/public/whatsapp/webhook?empresa=ID&chave=SEGREDO
  * (o segredo de cada empresa aparece na tela WhatsApp dela). Não passa pela
- * sessão de login — é o provedor externo chamando.
+ * sessão de login — é a Evolution API chamando.
  */
 export const whatsappWebhookRouter = Router();
 
@@ -75,9 +76,9 @@ whatsappWebhookRouter.post("/webhook", async (req, res) => {
   const empresa = empresaDoWebhook(req);
   if (!empresa) return res.status(401).send("empresa ou chave inválida");
 
-  // Limite por EMPRESA (não por IP): a D-API pode mandar de IPs compartilhados
-  // entre várias contas, então limitar por IP arriscaria bloquear webhooks
-  // legítimos de outros clientes dela.
+  // Limite por EMPRESA (não por IP): a Evolution API pode mandar de IPs
+  // compartilhados entre várias instâncias, então limitar por IP arriscaria
+  // bloquear webhooks legítimos de outras empresas.
   if (!limitar(`webhook-whatsapp:${empresa.id}`, { max: 120, janelaMs: 60_000 })) {
     return res.status(429).send("muitas requisições");
   }

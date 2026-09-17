@@ -26,8 +26,8 @@ Você vai precisar, fora do servidor:
    - Ativar a "Google Ads API" no projeto.
 3. **Developer Token do Google Ads** — na sua conta Google Ads, em Ferramentas e Configurações → Central da API. Se ele só tiver acesso "Test accounts", conversões só funcionam em contas de teste até você solicitar o acesso Básico.
    - Não precisa anotar número de MCC — a tela Google Ads do painel lista as contas/MCCs acessíveis e deixa escolher, funciona com qualquer uma.
-4. **Uma conta D-API por empresa/cliente**, cada uma com um número de WhatsApp — o **Session ID** e a **API Key** de cada uma você preenche depois, direto na tela WhatsApp daquela empresa no painel (nada disso vai pro `.env`).
-5. Para cada empresa, depois de criá-la no painel, a própria tela WhatsApp mostra a URL de webhook pronta (com o id da empresa e um segredo gerado automaticamente) — é só copiar e colar no dashboard da D-API daquela conta, no campo "Ao receber mensagem".
+4. **Nossa própria Evolution API** (self-hosted) já rodando, com uma `EVOLUTION_API_KEY` (chave global) em mãos — é só colar no `.env` (passo 3) que o botão "Criar sessão automaticamente" na tela WhatsApp de cada empresa já cria a instância e configura o webhook sozinho, sem precisar copiar Instance Name/API Key manualmente.
+5. Se preferir configurar uma empresa manualmente (ou já tiver uma instância criada por fora), a própria tela WhatsApp mostra a URL de webhook pronta (com o id da empresa e um segredo gerado automaticamente) — é só colar essa URL no `webhook/set` daquela instância, no evento `MESSAGES_UPSERT`.
 
 ## 1. Provisionar a VPS
 
@@ -78,10 +78,11 @@ GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
 GOOGLE_ADS_DEVELOPER_TOKEN=...
 
-DAPI_BASE_URL=https://api.d-api.cloud
+EVOLUTION_API_URL=https://api.evolutiondingdong.online
+EVOLUTION_API_KEY=...
 ```
 
-O Session ID e a API Key de cada empresa na D-API **não vão aqui** — você preenche na tela WhatsApp de cada empresa, dentro do painel, depois que o app estiver rodando (passo 6).
+O Instance Name e a API Key de cada empresa na Evolution API **não vão aqui** (a menos que você configure manualmente) — o botão "Criar sessão automaticamente" já cuida disso na tela WhatsApp de cada empresa, dentro do painel, depois que o app estiver rodando (passo 6).
 
 Gerar o hash da senha de login:
 
@@ -164,8 +165,7 @@ O Certbot já ajusta o Nginx pra redirecionar HTTP → HTTPS e agenda a renovaç
 1. Abra `https://SEUDOMINIO/login` e entre com o usuário/senha configurados.
 2. Vá em **Empresas** → crie uma empresa (ex: o nome do cliente).
 3. Dentro da empresa, vá em **Google Ads** → Conectar conta → autorize com a conta Google daquele cliente → escolha a conta de anúncios (se aparecer marcada como "MCC", clique pra ver as contas de dentro dela e escolha a conta de anúncio de verdade).
-4. Vá em **WhatsApp** → cole o Session ID e a API Key da D-API daquele cliente → Salvar → copie a URL de webhook mostrada na tela e cole no painel da D-API → gere o QR Code → escaneie com o celular.
-   - Se o status/QR Code não carregar, os caminhos exatos da API da D-API podem ser diferentes dos que usei em `server/whatsapp.js` (marcado em comentário no arquivo) — confira a documentação da D-API e ajusta ali.
+4. Vá em **WhatsApp** → clique em "Criar sessão automaticamente" (cria a instância na Evolution API e já configura o webhook) → escaneie o QR Code com o celular, ou use "conectar por código" se estiver longe do computador.
 5. Vá em **Regras de Venda** → cadastre as palavras-chave que indicam venda pra esse cliente (ex: "pagamento confirmado", "pix recebido") e decida se quer confirmar manualmente antes de enviar ao Google Ads.
 6. Vá em **Instalar Rastreio** → copie o script (já vem com o id certo da empresa) → cole no `<head>` do site desse cliente.
 7. Clique num link de WhatsApp do site com `?gclid=teste123` na URL, mande uma mensagem contendo uma das palavras-chave — a conversa deve aparecer em **Conversas** já com origem "Google Ads" e, se achou um valor em reais na mensagem, marcada como venda (automática ou "venda provável", dependendo da configuração).
