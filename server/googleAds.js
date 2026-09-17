@@ -206,6 +206,15 @@ export function desconectarGoogle(empresaId) {
   db.prepare("DELETE FROM google_conexoes WHERE empresa_id = ?").run(empresaId);
 }
 
+/** Limpa só a conta escolhida (mantém o e-mail/refresh token conectado) — reabre a tela de escolher conta. */
+export function limparContaEscolhida(empresaId) {
+  db.prepare(
+    `UPDATE google_conexoes
+     SET customer_id = NULL, customer_nome = NULL, login_customer_id = NULL, campanhas_selecionadas = NULL
+     WHERE empresa_id = ?`,
+  ).run(empresaId);
+}
+
 /** IDs das campanhas que a empresa escolheu acompanhar — só essas aparecem nos insights do Painel. */
 export function campanhasSelecionadasDe(empresaId) {
   const linha = db.prepare("SELECT campanhas_selecionadas FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
@@ -302,9 +311,13 @@ export async function listarSubcontasDe(empresaId, mccId) {
     method: "POST",
     headers: cabecalhos(auth.token, c.developerToken, id),
     body: JSON.stringify({
+      // status = ENABLED tira contas canceladas/suspensas/encerradas; hidden = FALSE tira contas ocultas
+      // (ex: contas de teste da própria MCC) — nenhuma das duas deve aparecer pra escolha no app.
       query: `SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager
               FROM customer_client
-              WHERE customer_client.status = 'ENABLED' AND customer_client.level <= 1`,
+              WHERE customer_client.status = 'ENABLED'
+                AND customer_client.hidden = FALSE
+                AND customer_client.level <= 1`,
     }),
   });
   const d = await res.json().catch(() => ({}));

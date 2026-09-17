@@ -67,6 +67,19 @@ export default function GoogleAds() {
     setCampanhas(null);
   }
 
+  async function trocarConta() {
+    setErro("");
+    try {
+      await api.googleTrocarConta(empresaId);
+      setCampanhas(null);
+      setMccAberta(null);
+      setSubcontas(null);
+      await carregarStatus();
+    } catch (e) {
+      setErro(e.message);
+    }
+  }
+
   async function carregarContas() {
     setOcupado(true);
     setErro("");
@@ -184,12 +197,22 @@ export default function GoogleAds() {
                 </p>
               )}
             </div>
-            <button
-              onClick={desconectar}
-              className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
-            >
-              Desconectar
-            </button>
+            <div className="flex items-center gap-4">
+              {status.customerId && (
+                <button
+                  onClick={trocarConta}
+                  className="text-sm font-medium text-slate-600 hover:underline dark:text-slate-400"
+                >
+                  Trocar conta
+                </button>
+              )}
+              <button
+                onClick={desconectar}
+                className="text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+              >
+                Desconectar
+              </button>
+            </div>
           </div>
         </div>
       ) : (

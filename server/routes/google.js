@@ -8,6 +8,7 @@ import {
   salvarConexao,
   salvarContaEscolhida,
   desconectarGoogle,
+  limparContaEscolhida,
   listarContas,
   listarSubcontasDe,
   listarCampanhas,
@@ -58,6 +59,12 @@ googleRouter.post("/contas/escolher", (req, res) => {
   const { customerId, nome, loginCustomerId } = req.body ?? {};
   if (!customerId) return res.status(400).json({ erro: "customerId obrigatório." });
   salvarContaEscolhida(req.empresaId, { customerId, nome, loginCustomerId });
+  res.json({ ok: true });
+});
+
+/** "Trocar conta" — mantém o e-mail conectado, só limpa a conta escolhida pra reabrir o seletor. */
+googleRouter.post("/contas/trocar", (req, res) => {
+  limparContaEscolhida(req.empresaId);
   res.json({ ok: true });
 });
 

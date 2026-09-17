@@ -4,6 +4,7 @@ import { api } from "../lib/api.js";
 
 const DURACAO_TESTE_MS = 30_000;
 const INTERVALO_POLL_MS = 2_000;
+const INTERVALO_BARRA_MS = 200;
 
 function formatarData(dataIso) {
   if (!dataIso) return "—";
@@ -22,12 +23,14 @@ export default function Tracking() {
   const [copiado, setCopiado] = useState(false);
   const [siteUrl, setSiteUrl] = useState("");
   const [status, setStatus] = useState(null); // null | "aguardando" | "sucesso" | "falha"
+  const [progresso, setProgresso] = useState(0);
   const [erroTeste, setErroTeste] = useState("");
   const [sites, setSites] = useState([]);
   const [regenerando, setRegenerando] = useState(false);
   const [erroRegenerar, setErroRegenerar] = useState("");
   const pollingRef = useRef(null);
   const urlTestadaRef = useRef("");
+  const iframeRef = useRef(null);
 
   const script = trackingToken
     ? `<script src="${window.location.origin}/t.js" data-empresa="${trackingToken}" async></script>`
@@ -39,6 +42,7 @@ export default function Tracking() {
       .then((r) => setTrackingToken(r.empresa.tracking_token))
       .catch(() => {});
     carregarSites();
+    return pararTeste;
   }, [empresaId]);
 
   function carregarSites() {
@@ -58,8 +62,13 @@ export default function Tracking() {
   function pararTeste() {
     if (pollingRef.current) {
       clearInterval(pollingRef.current.intervalo);
+      clearInterval(pollingRef.current.barra);
       clearTimeout(pollingRef.current.timeout);
       pollingRef.current = null;
+    }
+    if (iframeRef.current) {
+      iframeRef.current.remove();
+      iframeRef.current = null;
     }
   }
 
@@ -75,16 +84,31 @@ export default function Tracking() {
 
     const marcador = `teste-${Math.random().toString(36).slice(2, 10)}`;
     const separador = url.includes("?") ? "&" : "?";
-    window.open(`${url}${separador}gclid=${marcador}`, "_blank", "noopener");
 
     pararTeste();
     setStatus("aguardando");
+    setProgresso(0);
+
+    // Carrega o site num iframe escondido (sem abrir aba nova) só pra disparar
+    // o script de rastreio dele com o marcador de teste.
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:absolute;width:1px;height:1px;border:0;opacity:0;pointer-events:none;";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.src = `${url}${separador}gclid=${marcador}`;
+    document.body.appendChild(iframe);
+    iframeRef.current = iframe;
+
+    const inicio = Date.now();
+    const barra = setInterval(() => {
+      setProgresso(Math.min(100, Math.round(((Date.now() - inicio) / DURACAO_TESTE_MS) * 100)));
+    }, INTERVALO_BARRA_MS);
 
     const intervalo = setInterval(async () => {
       try {
         const r = await api.verificarTracking(empresaId, marcador);
         if (r.recebido) {
           pararTeste();
+          setProgresso(100);
           setStatus("sucesso");
           api
             .registrarSiteTestado(empresaId, urlTestadaRef.current)
@@ -101,7 +125,7 @@ export default function Tracking() {
       setStatus((atual) => (atual === "aguardando" ? "falha" : atual));
     }, DURACAO_TESTE_MS);
 
-    pollingRef.current = { intervalo, timeout };
+    pollingRef.current = { intervalo, timeout, barra };
   }
 
   function removerSite(url) {
@@ -170,8 +194,8 @@ export default function Tracking() {
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Testar instalação</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Depois de colar o script no site, use isso pra confirmar sem precisar gastar com anúncio de verdade: a
-          gente abre seu site numa aba nova com um clique de teste e espera até 30 segundos pra ver se ele chega
-          aqui.
+          gente carrega seu site em segundo plano (sem abrir aba nova) com um clique de teste e espera até 30
+          segundos pra ver se ele chega aqui.
         </p>
         <div className="flex flex-wrap gap-2">
           <input
@@ -192,9 +216,15 @@ export default function Tracking() {
         {erroTeste && <p className="text-sm text-red-600 dark:text-red-400">{erroTeste}</p>}
 
         {status === "aguardando" && (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Abrimos seu site numa aba nova — aguardando o clique de teste chegar (até 30s)…
-          </p>
+          <div className="space-y-2">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-slate-900 transition-all duration-200 dark:bg-white"
+                style={{ width: `${progresso}%` }}
+              />
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Aguardando o clique de teste chegar…</p>
+          </div>
         )}
         {status === "sucesso" && (
           <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-400">
@@ -202,11 +232,26 @@ export default function Tracking() {
           </p>
         )}
         {status === "falha" && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
-            ❌ Não recebemos nada em 30 segundos. Confira se o script está mesmo colado no{" "}
-            <code>&lt;head&gt;</code> do site (e não num bloqueador de anúncios/rastreio ativo no navegador que você
-            testou).
-          </p>
+          <div className="space-y-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            <p>
+              ❌ Não recebemos nada em 30 segundos. Confira se o script está mesmo colado no{" "}
+              <code>&lt;head&gt;</code> do site.
+            </p>
+            <p>
+              Alguns sites bloqueiam ser carregados em segundo plano por outra página (proteção de segurança) — se
+              você tem certeza que instalou certo, abra{" "}
+              <a
+                href={urlTestadaRef.current || siteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline"
+              >
+                seu site
+              </a>{" "}
+              manualmente numa aba, espere alguns segundos com ela aberta e tente o teste de novo — ou desative
+              temporariamente bloqueadores de anúncio/rastreio no navegador que você está usando pra testar.
+            </p>
+          </div>
         )}
 
         {sites.length > 0 && (

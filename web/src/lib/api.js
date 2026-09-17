@@ -51,6 +51,7 @@ export const api = {
   googleStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/google/status`),
   googleAuthUrl: (empresaId) => chamar(`/api/empresas/${empresaId}/google/auth-url`),
   googleDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/google/desconectar`, { method: "POST" }),
+  googleTrocarConta: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas/trocar`, { method: "POST" }),
   googleContas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/contas`),
   googleSubcontas: (empresaId, mccId) => chamar(`/api/empresas/${empresaId}/google/contas/${mccId}/subcontas`),
   googleEscolherConta: (empresaId, customerId, nome, loginCustomerId) =>
