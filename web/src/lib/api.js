@@ -44,6 +44,8 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/dashboard/fila-envio/${id}/enviar-agora`, { method: "POST" }),
   cancelarEnvioVenda: (empresaId, id) =>
     chamar(`/api/empresas/${empresaId}/dashboard/fila-envio/${id}/cancelar`, { method: "POST" }),
+  insightsDashboard: (empresaId, periodo) =>
+    chamar(`/api/empresas/${empresaId}/dashboard/insights?periodo=${encodeURIComponent(periodo)}`),
 
   // ---- Google Ads ----
   googleStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/google/status`),
@@ -56,7 +58,16 @@ export const api = {
       method: "POST",
       body: { customerId, nome, loginCustomerId },
     }),
-  googleCampanhas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/campanhas`),
+  googleCampanhas: (empresaId, periodo) =>
+    chamar(`/api/empresas/${empresaId}/google/campanhas?periodo=${encodeURIComponent(periodo)}`),
+  googleCampanhasSelecionadas: (empresaId) => chamar(`/api/empresas/${empresaId}/google/campanhas/selecionadas`),
+  googleSalvarCampanhasSelecionadas: (empresaId, ids) =>
+    chamar(`/api/empresas/${empresaId}/google/campanhas/selecionadas`, { method: "POST", body: { ids } }),
+  googleDefinirStatusCampanha: (empresaId, campanhaId, ativar) =>
+    chamar(`/api/empresas/${empresaId}/google/campanhas/${campanhaId}/status`, {
+      method: "POST",
+      body: { ativar },
+    }),
 
   // ---- WhatsApp ----
   whatsappStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/status`),

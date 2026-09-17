@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
+import PeriodoSelect from "../components/PeriodoSelect.jsx";
+
+function formatarMoeda(v) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v) || 0);
+}
 
 export default function GoogleAds() {
   const { empresaId } = useParams();
@@ -9,6 +14,11 @@ export default function GoogleAds() {
   const [mccAberta, setMccAberta] = useState(null); // MCC sendo explorada, ou null pra lista principal
   const [subcontas, setSubcontas] = useState(null);
   const [campanhas, setCampanhas] = useState(null);
+  const [selecionadas, setSelecionadas] = useState(new Set());
+  const [salvandoSelecao, setSalvandoSelecao] = useState(false);
+  const [avisoSelecao, setAvisoSelecao] = useState("");
+  const [pausando, setPausando] = useState("");
+  const [periodo, setPeriodo] = useState("30dias");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -22,6 +32,10 @@ export default function GoogleAds() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("erro")) setErro(params.get("erro"));
   }, [empresaId]);
+
+  useEffect(() => {
+    if (status?.conectado && status.customerId) carregarCampanhas();
+  }, [periodo]);
 
   async function carregarStatus() {
     try {
@@ -96,17 +110,60 @@ export default function GoogleAds() {
 
   async function carregarCampanhas() {
     try {
-      const r = await api.googleCampanhas(empresaId);
+      const [r, sel] = await Promise.all([
+        api.googleCampanhas(empresaId, periodo),
+        api.googleCampanhasSelecionadas(empresaId),
+      ]);
       setCampanhas(r.campanhas);
+      setSelecionadas(new Set(sel.ids.map(String)));
     } catch (e) {
       setErro(e.message);
     }
   }
 
+  function alternarSelecao(id) {
+    setSelecionadas((atual) => {
+      const nova = new Set(atual);
+      if (nova.has(id)) nova.delete(id);
+      else nova.add(id);
+      return nova;
+    });
+  }
+
+  async function salvarSelecao() {
+    setSalvandoSelecao(true);
+    setAvisoSelecao("");
+    setErro("");
+    try {
+      await api.googleSalvarCampanhasSelecionadas(empresaId, Array.from(selecionadas));
+      setAvisoSelecao("Seleção salva — o Painel agora mostra só essas campanhas.");
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setSalvandoSelecao(false);
+    }
+  }
+
+  async function alternarStatusCampanha(campanha) {
+    const ativar = campanha.status !== "ENABLED";
+    setPausando(campanha.id);
+    setErro("");
+    try {
+      await api.googleDefinirStatusCampanha(empresaId, campanha.id, ativar);
+      await carregarCampanhas();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setPausando("");
+    }
+  }
+
   const listaAtual = mccAberta ? subcontas : contas;
+  const mccs = (listaAtual ?? []).filter((c) => c.isManager);
+  const normais = (listaAtual ?? []).filter((c) => !c.isManager);
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Google Ads</h1>
 
       {erro && (
@@ -174,53 +231,116 @@ export default function GoogleAds() {
             )}
           </div>
           {ocupado && <p className="text-sm text-slate-500 dark:text-slate-400">Carregando…</p>}
-          <ul className="space-y-2">
-            {(listaAtual ?? []).map((c) => (
-              <li key={c.customerId}>
-                <button
-                  onClick={() => (mccAberta ? escolherConta(c, mccAberta) : abrirConta(c))}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  {c.nome} <span className="text-slate-400 dark:text-slate-500">({c.customerId})</span>
-                  {c.isManager && (
-                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                      MCC
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {listaAtual && listaAtual.length === 0 && (
+          {listaAtual && listaAtual.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">Nenhuma conta encontrada aqui.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Contas MCC
+                </p>
+                <ul className="space-y-2">
+                  {mccs.map((c) => (
+                    <li key={c.customerId}>
+                      <button
+                        onClick={() => (mccAberta ? escolherConta(c, mccAberta) : abrirConta(c))}
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      >
+                        {c.nome} <span className="text-slate-400 dark:text-slate-500">({c.customerId})</span>
+                      </button>
+                    </li>
+                  ))}
+                  {mccs.length === 0 && <li className="text-sm text-slate-400 dark:text-slate-500">Nenhuma</li>}
+                </ul>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Contas normais
+                </p>
+                <ul className="space-y-2">
+                  {normais.map((c) => (
+                    <li key={c.customerId}>
+                      <button
+                        onClick={() => (mccAberta ? escolherConta(c, mccAberta) : abrirConta(c))}
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      >
+                        {c.nome} <span className="text-slate-400 dark:text-slate-500">({c.customerId})</span>
+                      </button>
+                    </li>
+                  ))}
+                  {normais.length === 0 && <li className="text-sm text-slate-400 dark:text-slate-500">Nenhuma</li>}
+                </ul>
+              </div>
+            </div>
           )}
         </div>
       )}
 
       {campanhas && (
         <div>
-          <h2 className="mb-3 text-lg font-medium">Campanhas (últimos 30 dias)</h2>
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-medium">Campanhas</h2>
+            <PeriodoSelect valor={periodo} onChange={setPeriodo} />
+          </div>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+            Marque as campanhas que você quer acompanhar — só as marcadas entram nos insights do Painel.
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
+                  <th className="px-4 py-2"></th>
                   <th className="px-4 py-2">Campanha</th>
                   <th className="px-4 py-2">Status</th>
                   <th className="px-4 py-2">Cliques</th>
                   <th className="px-4 py-2">Impressões</th>
+                  <th className="px-4 py-2">CPC médio</th>
+                  <th className="px-4 py-2">Custo/conversão</th>
+                  <th className="px-4 py-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {campanhas.map((c) => (
                   <tr key={c.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selecionadas.has(String(c.id))}
+                        onChange={() => alternarSelecao(String(c.id))}
+                        className="size-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800"
+                      />
+                    </td>
                     <td className="px-4 py-2">{c.nome}</td>
                     <td className="px-4 py-2">{c.status}</td>
                     <td className="px-4 py-2">{c.cliques}</td>
                     <td className="px-4 py-2">{c.impressoes}</td>
+                    <td className="px-4 py-2">{formatarMoeda(c.cpcMedio)}</td>
+                    <td className="px-4 py-2">{formatarMoeda(c.custoPorConversao)}</td>
+                    <td className="px-4 py-2 text-right">
+                      {(c.status === "ENABLED" || c.status === "PAUSED") && (
+                        <button
+                          onClick={() => alternarStatusCampanha(c)}
+                          disabled={pausando === c.id}
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                        >
+                          {c.status === "ENABLED" ? "Pausar" : "Ativar"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={salvarSelecao}
+              disabled={salvandoSelecao}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+            >
+              {salvandoSelecao ? "Salvando…" : "Salvar campanhas acompanhadas"}
+            </button>
+            {avisoSelecao && <p className="text-sm text-green-700 dark:text-green-400">{avisoSelecao}</p>}
           </div>
         </div>
       )}

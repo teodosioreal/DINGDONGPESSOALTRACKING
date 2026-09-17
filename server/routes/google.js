@@ -11,6 +11,9 @@ import {
   listarContas,
   listarSubcontasDe,
   listarCampanhas,
+  campanhasSelecionadasDe,
+  salvarCampanhasSelecionadas,
+  definirStatusCampanha,
 } from "../googleAds.js";
 
 export const googleRouter = Router({ mergeParams: true });
@@ -59,9 +62,29 @@ googleRouter.post("/contas/escolher", (req, res) => {
 });
 
 googleRouter.get("/campanhas", async (req, res) => {
-  const r = await listarCampanhas(req.empresaId);
+  const r = await listarCampanhas(req.empresaId, req.query.periodo);
   if (r.erro) return res.status(400).json({ erro: r.erro });
   res.json({ campanhas: r.campanhas });
+});
+
+/** Quais campanhas a empresa escolheu acompanhar — só essas entram nos insights do Painel. */
+googleRouter.get("/campanhas/selecionadas", (req, res) => {
+  res.json({ ids: campanhasSelecionadasDe(req.empresaId) });
+});
+
+googleRouter.post("/campanhas/selecionadas", (req, res) => {
+  const { ids } = req.body ?? {};
+  if (!Array.isArray(ids)) return res.status(400).json({ erro: "ids deve ser uma lista." });
+  salvarCampanhasSelecionadas(req.empresaId, ids);
+  res.json({ ok: true });
+});
+
+googleRouter.post("/campanhas/:campanhaId/status", async (req, res) => {
+  if (!/^\d+$/.test(req.params.campanhaId)) return res.status(400).json({ erro: "Campanha inválida." });
+  const { ativar } = req.body ?? {};
+  const r = await definirStatusCampanha(req.empresaId, req.params.campanhaId, Boolean(ativar));
+  if (!r.ok) return res.status(400).json({ erro: r.erro });
+  res.json({ ok: true });
 });
 
 /**

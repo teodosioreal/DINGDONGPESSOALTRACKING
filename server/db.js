@@ -40,7 +40,8 @@ function criarSchema() {
     email TEXT,
     customer_id TEXT,
     customer_nome TEXT,
-    login_customer_id TEXT
+    login_customer_id TEXT,
+    campanhas_selecionadas TEXT
   );
 
   CREATE TABLE IF NOT EXISTS whatsapp_conexoes (
@@ -216,6 +217,7 @@ function migrarColunasNovas() {
   adicionarColuna("ips_bloqueados", "motivo", "TEXT");
   adicionarColuna("ips_bloqueados", "google_criterios", "TEXT");
   adicionarColuna("ips_bloqueados", "google_erro", "TEXT");
+  adicionarColuna("google_conexoes", "campanhas_selecionadas", "TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_clicks_empresa_ip ON clicks(empresa_id, ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_conversas_fila_status ON conversas(fila_status, envio_agendado_para);");
 
@@ -333,6 +335,11 @@ export function listarIpsBloqueados(empresaId) {
 export function ipEstaBloqueado(empresaId, ip) {
   if (!ip) return false;
   return Boolean(db.prepare("SELECT 1 FROM ips_bloqueados WHERE empresa_id = ? AND ip = ?").get(empresaId, ip));
+}
+
+/** Usado no Painel — "Concorrentes Bloqueados". */
+export function contarIpsBloqueados(empresaId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM ips_bloqueados WHERE empresa_id = ?").get(empresaId).n;
 }
 
 /** Usado pelo botão "Testar instalação": o gclid de teste chegou como um clique de verdade? */

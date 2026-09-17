@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
+import PeriodoSelect from "../components/PeriodoSelect.jsx";
 
 const NOME_ORIGEM = { google: "Google Ads", meta: "Meta Ads", sem_rastreio: "Sem rastreio" };
 
@@ -12,6 +13,8 @@ export default function Dashboard() {
   const [processando, setProcessando] = useState("");
   const [erro, setErro] = useState("");
   const [erroFila, setErroFila] = useState("");
+  const [periodo, setPeriodo] = useState("30dias");
+  const [insights, setInsights] = useState(null);
 
   useEffect(() => {
     setResumo(null);
@@ -29,6 +32,14 @@ export default function Dashboard() {
     const t = setInterval(carregarFila, 30000);
     return () => clearInterval(t);
   }, [empresaId]);
+
+  useEffect(() => {
+    setInsights(null);
+    api
+      .insightsDashboard(empresaId, periodo)
+      .then(setInsights)
+      .catch(() => {});
+  }, [empresaId, periodo]);
 
   async function carregarFila() {
     try {
@@ -72,7 +83,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Painel</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Painel</h1>
+        <PeriodoSelect valor={periodo} onChange={setPeriodo} />
+      </div>
 
       {checklist && <ChecklistSetup empresaId={empresaId} checklist={checklist} />}
 
@@ -80,6 +94,26 @@ export default function Dashboard() {
         <Card titulo="Leads hoje" valor={resumo.leadsHoje} />
         <Card titulo="Total de vendas" valor={resumo.totalVendas} />
         <Card titulo="Receita gerada" valor={formatarMoeda(resumo.receita, resumo.moeda)} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card titulo="Concorrentes bloqueados" valor={insights ? insights.concorrentesBloqueados : "…"} />
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cliques inválidos (Google Ads)</p>
+          {insights?.semSelecaoDeCampanhas ? (
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Selecione quais campanhas acompanhar na{" "}
+              <Link to={`/app/empresas/${empresaId}/google-ads`} className="font-medium underline">
+                aba Google Ads
+              </Link>{" "}
+              pra ver esse número.
+            </p>
+          ) : insights?.erroGoogle ? (
+            <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">{insights.erroGoogle}</p>
+          ) : (
+            <p className="mt-1 text-2xl font-semibold tracking-tight">{insights ? insights.cliquesInvalidos : "…"}</p>
+          )}
+        </div>
       </div>
 
       {resumo.vendasProvaveisPendentes > 0 && (

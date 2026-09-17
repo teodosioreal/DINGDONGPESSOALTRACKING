@@ -195,12 +195,34 @@ export function salvarConexao(empresaId, { refreshToken, email }) {
 /** `loginCustomerId` é a MCC usada como "conta de login" — só necessária quando a conta é subconta de uma MCC. */
 export function salvarContaEscolhida(empresaId, { customerId, nome, loginCustomerId }) {
   db.prepare(
-    `UPDATE google_conexoes SET customer_id = ?, customer_nome = ?, login_customer_id = ? WHERE empresa_id = ?`,
+    // Troca de conta zera as campanhas selecionadas — eram de outra conta, não fazem mais sentido aqui.
+    `UPDATE google_conexoes
+     SET customer_id = ?, customer_nome = ?, login_customer_id = ?, campanhas_selecionadas = NULL
+     WHERE empresa_id = ?`,
   ).run(limparId(customerId), nome ?? null, limparId(loginCustomerId ?? "") || null, empresaId);
 }
 
 export function desconectarGoogle(empresaId) {
   db.prepare("DELETE FROM google_conexoes WHERE empresa_id = ?").run(empresaId);
+}
+
+/** IDs das campanhas que a empresa escolheu acompanhar — só essas aparecem nos insights do Painel. */
+export function campanhasSelecionadasDe(empresaId) {
+  const linha = db.prepare("SELECT campanhas_selecionadas FROM google_conexoes WHERE empresa_id = ?").get(empresaId);
+  if (!linha?.campanhas_selecionadas) return [];
+  try {
+    return JSON.parse(linha.campanhas_selecionadas);
+  } catch {
+    return [];
+  }
+}
+
+export function salvarCampanhasSelecionadas(empresaId, ids) {
+  const lista = Array.isArray(ids) ? ids.map((id) => String(id)) : [];
+  db.prepare("UPDATE google_conexoes SET campanhas_selecionadas = ? WHERE empresa_id = ?").run(
+    JSON.stringify(lista),
+    empresaId,
+  );
 }
 
 export async function emailDoAccessToken(token) {
@@ -239,23 +261,28 @@ export async function listarContas(empresaId) {
   const contas = [];
   for (const id of ids) {
     const info = await infoDaConta(auth.token, c.developerToken, id);
+    if (info.deletada) continue;
     contas.push({ customerId: id, nome: info.nome || `Conta ${id}`, isManager: info.isManager });
   }
   return { contas };
 }
 
+/** Contas CANCELED/CLOSED no Google Ads são contas apagadas/encerradas — não devem aparecer no app. */
 async function infoDaConta(token, developerToken, customerId, loginCustomerId) {
   try {
     const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
       method: "POST",
       headers: cabecalhos(token, developerToken, loginCustomerId),
-      body: JSON.stringify({ query: "SELECT customer.descriptive_name, customer.manager FROM customer LIMIT 1" }),
+      body: JSON.stringify({
+        query: "SELECT customer.descriptive_name, customer.manager, customer.status FROM customer LIMIT 1",
+      }),
     });
     const d = await res.json().catch(() => ({}));
     const cliente = d.results?.[0]?.customer;
-    return { nome: cliente?.descriptiveName ?? "", isManager: Boolean(cliente?.manager) };
+    const deletada = cliente?.status === "CANCELED" || cliente?.status === "CLOSED";
+    return { nome: cliente?.descriptiveName ?? "", isManager: Boolean(cliente?.manager), deletada };
   } catch {
-    return { nome: "", isManager: false };
+    return { nome: "", isManager: false, deletada: false };
   }
 }
 
@@ -292,7 +319,20 @@ export async function listarSubcontasDe(empresaId, mccId) {
   return { contas };
 }
 
-export async function listarCampanhas(empresaId) {
+const PERIODOS_VALIDOS = {
+  hoje: "TODAY",
+  "7dias": "LAST_7_DAYS",
+  "30dias": "LAST_30_DAYS",
+  este_mes: "THIS_MONTH",
+  mes_passado: "LAST_MONTH",
+};
+
+/** Traduz o período escolhido na tela pro macro de data do GAQL — cai em LAST_30_DAYS se vier algo inesperado. */
+function macroPeriodo(periodo) {
+  return PERIODOS_VALIDOS[periodo] ?? "LAST_30_DAYS";
+}
+
+export async function listarCampanhas(empresaId, periodo) {
   const c = lerCredenciaisApp();
   if (c.erro) return { campanhas: [], erro: c.erro };
   const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
@@ -305,21 +345,93 @@ export async function listarCampanhas(empresaId) {
     method: "POST",
     headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
     body: JSON.stringify({
-      query: `SELECT campaign.id, campaign.name, campaign.status, metrics.clicks, metrics.impressions
-              FROM campaign WHERE segments.date DURING LAST_30_DAYS`,
+      query: `SELECT campaign.id, campaign.name, campaign.status, metrics.clicks, metrics.impressions,
+                metrics.average_cpc, metrics.cost_micros, metrics.conversions, metrics.cost_per_conversion,
+                metrics.invalid_clicks
+              FROM campaign
+              WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.status != 'REMOVED'`,
     }),
   });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) return { campanhas: [], erro: mensagemAmigavel(d.error?.message, res.status) };
 
+  const selecionadas = new Set(campanhasSelecionadasDe(empresaId));
   const campanhas = (d.results ?? []).map((r) => ({
     id: r.campaign?.id ?? "",
     nome: r.campaign?.name ?? "",
     status: r.campaign?.status ?? "",
     cliques: Number(r.metrics?.clicks ?? 0),
     impressoes: Number(r.metrics?.impressions ?? 0),
+    cpcMedio: Number(r.metrics?.averageCpc ?? 0) / 1_000_000,
+    custo: Number(r.metrics?.costMicros ?? 0) / 1_000_000,
+    conversoes: Number(r.metrics?.conversions ?? 0),
+    custoPorConversao: Number(r.metrics?.costPerConversion ?? 0) / 1_000_000,
+    cliquesInvalidos: Number(r.metrics?.invalidClicks ?? 0),
+    selecionada: selecionadas.has(String(r.campaign?.id ?? "")),
   }));
   return { campanhas };
+}
+
+/** Pausa ou reativa uma campanha direto pelo app. */
+export async function definirStatusCampanha(empresaId, campanhaId, ativar) {
+  const c = lerCredenciaisApp();
+  if (c.erro) return { ok: false, erro: c.erro };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken || !customerId) return { ok: false, erro: "Google Ads não conectado nesta empresa." };
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return { ok: false, erro: auth.erro };
+
+  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/campaigns:mutate`, {
+    method: "POST",
+    headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
+    body: JSON.stringify({
+      operations: [
+        {
+          updateMask: "status",
+          update: {
+            resourceName: `customers/${customerId}/campaigns/${campanhaId}`,
+            status: ativar ? "ENABLED" : "PAUSED",
+          },
+        },
+      ],
+    }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, erro: mensagemAmigavel(d.error?.message, res.status) };
+  return { ok: true };
+}
+
+/**
+ * Soma cliques inválidos das campanhas que a empresa escolheu acompanhar,
+ * pro card "Cliques Inválidos" do Painel. Se a empresa não selecionou
+ * nenhuma campanha ainda, devolve zero sem erro (o Painel mostra um aviso
+ * pedindo pra selecionar em vez de quebrar).
+ */
+export async function cliquesInvalidosDasSelecionadas(empresaId, periodo) {
+  const selecionadas = campanhasSelecionadasDe(empresaId);
+  if (selecionadas.length === 0) return { cliquesInvalidos: 0, semSelecao: true };
+
+  const c = lerCredenciaisApp();
+  if (c.erro) return { cliquesInvalidos: 0, erro: c.erro };
+  const { refreshToken, customerId, loginCustomerId } = conexaoSalva(empresaId);
+  if (!refreshToken || !customerId) return { cliquesInvalidos: 0, erro: "Google Ads não conectado nesta empresa." };
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return { cliquesInvalidos: 0, erro: auth.erro };
+
+  const idsEmLista = selecionadas.map((id) => `'${id}'`).join(",");
+  const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
+    method: "POST",
+    headers: cabecalhos(auth.token, c.developerToken, loginCustomerId),
+    body: JSON.stringify({
+      query: `SELECT metrics.invalid_clicks FROM campaign
+              WHERE segments.date DURING ${macroPeriodo(periodo)} AND campaign.id IN (${idsEmLista})`,
+    }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) return { cliquesInvalidos: 0, erro: mensagemAmigavel(d.error?.message, res.status) };
+
+  const total = (d.results ?? []).reduce((soma, r) => soma + Number(r.metrics?.invalidClicks ?? 0), 0);
+  return { cliquesInvalidos: total };
 }
 
 /**

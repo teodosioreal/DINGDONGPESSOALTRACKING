@@ -13,7 +13,8 @@ import {
   eventosRecentes,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
-import { marcarConversaLida, contarConversasNaoLidas, checklistSetup } from "../db.js";
+import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
+import { cliquesInvalidosDasSelecionadas } from "../googleAds.js";
 
 export const conversasRouter = Router({ mergeParams: true });
 
@@ -97,4 +98,16 @@ dashboardRouter.post("/fila-envio/:id/cancelar", (req, res) => {
   const r = cancelarEnvio(conversa);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
   res.json({ ok: true });
+});
+
+/** Cards "Concorrentes Bloqueados" e "Cliques Inválidos" do Painel. */
+dashboardRouter.get("/insights", async (req, res) => {
+  const concorrentesBloqueados = contarIpsBloqueados(req.empresaId);
+  const r = await cliquesInvalidosDasSelecionadas(req.empresaId, req.query.periodo);
+  res.json({
+    concorrentesBloqueados,
+    cliquesInvalidos: r.cliquesInvalidos,
+    semSelecaoDeCampanhas: Boolean(r.semSelecao),
+    erroGoogle: r.erro ?? null,
+  });
 });
