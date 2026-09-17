@@ -15,8 +15,18 @@
   try {
     var CHAVE_CODIGO = "dingdong_codigo";
     var CHAVE_GCLID = "dingdong_gclid";
+    var CHAVE_GCLID_QUANDO = "dingdong_gclid_quando";
     var CHAVE_FBCLID = "dingdong_fbclid";
+    var CHAVE_FBCLID_QUANDO = "dingdong_fbclid_quando";
     var CHAVE_CAMPANHA = "dingdong_campanha";
+    var CHAVE_CAMPANHA_QUANDO = "dingdong_campanha_quando";
+    // Por quanto tempo um clique de anúncio guardado no navegador ainda vale
+    // pra visitas seguintes sem gclid na URL (ex: a pessoa navega pra outra
+    // página do mesmo site e só depois manda WhatsApp). Sem isso, um clique
+    // de anúncio de meses atrás ficava sendo repetido pra sempre em toda
+    // visita futura da mesma pessoa — inclusive visitas 100% orgânicas —, e
+    // aparecia errado como "veio de anúncio" no painel.
+    var JANELA_ATRIBUICAO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
     function gerarCodigo() {
       var alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -25,18 +35,32 @@
       return out;
     }
 
+    /** Lê um valor guardado só se ainda estiver dentro da janela de atribuição — senão trata como se não existisse. */
+    function lerComExpiracao(chaveValor, chaveQuando) {
+      var quando = Number(localStorage.getItem(chaveQuando) || 0);
+      if (!quando || Date.now() - quando > JANELA_ATRIBUICAO_MS) return "";
+      return localStorage.getItem(chaveValor) || "";
+    }
+
+    function guardarComData(chaveValor, chaveQuando, valor) {
+      localStorage.setItem(chaveValor, valor);
+      localStorage.setItem(chaveQuando, String(Date.now()));
+    }
+
     var params = new URLSearchParams(window.location.search);
-    var gclid = params.get("gclid") || localStorage.getItem(CHAVE_GCLID) || "";
-    var fbclid = params.get("fbclid") || localStorage.getItem(CHAVE_FBCLID) || "";
-    if (params.get("gclid")) localStorage.setItem(CHAVE_GCLID, gclid);
-    if (params.get("fbclid")) localStorage.setItem(CHAVE_FBCLID, fbclid);
+    var gclidUrl = params.get("gclid") || "";
+    var fbclidUrl = params.get("fbclid") || "";
+    var gclid = gclidUrl || lerComExpiracao(CHAVE_GCLID, CHAVE_GCLID_QUANDO);
+    var fbclid = fbclidUrl || lerComExpiracao(CHAVE_FBCLID, CHAVE_FBCLID_QUANDO);
+    if (gclidUrl) guardarComData(CHAVE_GCLID, CHAVE_GCLID_QUANDO, gclidUrl);
+    if (fbclidUrl) guardarComData(CHAVE_FBCLID, CHAVE_FBCLID_QUANDO, fbclidUrl);
 
     // Nome/ID da campanha: só chega aqui se o anúncio tiver um parâmetro
     // utm_campaign ou campaignid (ValueTrack) na URL final — se não tiver,
     // fica em branco e a venda aparece como "campanha indefinida" no painel.
     var campanhaUrl = params.get("utm_campaign") || params.get("campaignid") || "";
-    var campanha = campanhaUrl || localStorage.getItem(CHAVE_CAMPANHA) || "";
-    if (campanhaUrl) localStorage.setItem(CHAVE_CAMPANHA, campanhaUrl);
+    var campanha = campanhaUrl || lerComExpiracao(CHAVE_CAMPANHA, CHAVE_CAMPANHA_QUANDO);
+    if (campanhaUrl) guardarComData(CHAVE_CAMPANHA, CHAVE_CAMPANHA_QUANDO, campanhaUrl);
 
     var codigo = localStorage.getItem(CHAVE_CODIGO);
     if (!codigo) {
