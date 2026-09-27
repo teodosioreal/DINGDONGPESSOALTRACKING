@@ -12,6 +12,7 @@ export default function MetaAds() {
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState(null);
+  const [codigoTeste, setCodigoTeste] = useState("");
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
 
@@ -61,12 +62,13 @@ export default function MetaAds() {
     }
   }
 
-  async function testarConexao() {
+  async function testarConexao(e) {
+    e.preventDefault();
     setTestando(true);
     setResultadoTeste(null);
     try {
-      const r = await api.metaTestarConexao(empresaId);
-      setResultadoTeste({ ok: true, nome: r.nome, id: r.id });
+      await api.metaTestarConexao(empresaId, codigoTeste.trim());
+      setResultadoTeste({ ok: true });
     } catch (e) {
       setResultadoTeste({ ok: false, mensagem: e.message });
     } finally {
@@ -173,9 +175,31 @@ export default function MetaAds() {
       )}
 
       {conectado && !expandido && (
-        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <form
+          onSubmit={testarConexao}
+          className="space-y-3 rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Código de teste de eventos
+            </label>
+            <input
+              type="text"
+              value={codigoTeste}
+              onChange={(e) => setCodigoTeste(e.target.value)}
+              placeholder="Ex: TEST12345"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              required
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Pega em Gerenciador de Eventos &gt; seu dataset &gt; aba "Testar eventos". O token da Conversions API
+              só tem permissão pra enviar eventos, não pra consultar o pixel — por isso o teste manda um evento de
+              verdade, mas marcado com esse código, que a Meta não conta como dado real (aparece na aba de teste,
+              não nos relatórios).
+            </p>
+          </div>
           <button
-            onClick={testarConexao}
+            type="submit"
             disabled={testando}
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
@@ -183,16 +207,16 @@ export default function MetaAds() {
           </button>
           {resultadoTeste && (
             <p
-              className={`mt-3 text-sm ${
-                resultadoTeste.ok
-                  ? "text-green-700 dark:text-green-400"
-                  : "text-red-600 dark:text-red-400"
+              className={`text-sm ${
+                resultadoTeste.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"
               }`}
             >
-              {resultadoTeste.ok ? `Pixel "${resultadoTeste.nome}" (${resultadoTeste.id}) válido.` : resultadoTeste.mensagem}
+              {resultadoTeste.ok
+                ? 'Evento de teste enviado — confira em Gerenciador de Eventos > "Testar eventos" se ele apareceu.'
+                : resultadoTeste.mensagem}
             </p>
           )}
-        </div>
+        </form>
       )}
     </div>
   );

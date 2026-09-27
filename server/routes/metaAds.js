@@ -21,9 +21,14 @@ metaRouter.post("/desconectar", (req, res) => {
   res.json({ ok: true });
 });
 
-/** Testa se o Pixel ID + token salvos são válidos, sem mandar evento nenhum. */
+/**
+ * Testa se o Pixel ID + token salvos são válidos — precisa do
+ * "código de teste de eventos" (Gerenciador de Eventos > dataset > aba
+ * "Testar eventos"), porque o token da Conversions API só tem permissão
+ * pra enviar eventos, não pra consultar dados do pixel.
+ */
 metaRouter.get("/testar-conexao", async (req, res) => {
-  const r = await testarConexaoMeta(req.empresaId);
+  const r = await testarConexaoMeta(req.empresaId, req.query.testEventCode);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
   res.json(r);
 });

@@ -77,7 +77,8 @@ export const api = {
   metaSalvarConexao: (empresaId, pixelId, accessToken) =>
     chamar(`/api/empresas/${empresaId}/meta/conexao`, { method: "POST", body: { pixelId, accessToken } }),
   metaDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/meta/desconectar`, { method: "POST" }),
-  metaTestarConexao: (empresaId) => chamar(`/api/empresas/${empresaId}/meta/testar-conexao`),
+  metaTestarConexao: (empresaId, testEventCode) =>
+    chamar(`/api/empresas/${empresaId}/meta/testar-conexao?testEventCode=${encodeURIComponent(testEventCode)}`),
 
   // ---- WhatsApp ----
   whatsappStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/status`),

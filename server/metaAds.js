@@ -25,21 +25,50 @@ export function desconectarMeta(empresaId) {
 }
 
 /**
- * Confirma que o Pixel ID e o token salvos são válidos, sem mandar nenhum
- * evento fake pro Meta — só consulta os dados do próprio pixel.
+ * Confirma que o Pixel ID e o token salvos são válidos — SEM contar como
+ * dado real, usando o `test_event_code` do Meta (Gerenciador de Eventos >
+ * aba "Testar eventos" do dataset). Não dá pra validar com uma consulta
+ * (GET) simples: o token gerado especificamente pra Conversions API só tem
+ * permissão pra ENVIAR eventos, não pra ler dados do pixel — por isso o
+ * teste é, na prática, um envio real (marcado como teste).
  */
-export async function testarConexaoMeta(empresaId) {
+export async function testarConexaoMeta(empresaId, testEventCode) {
   const conexao = conexaoMetaSalva(empresaId);
   if (!conexao.pixelId || !conexao.accessToken) {
     return { ok: false, erro: "Conecte o Meta Ads primeiro (Pixel ID e token de acesso)." };
   }
-  const url = `https://graph.facebook.com/${VERSAO_GRAPH}/${conexao.pixelId}?fields=id,name&access_token=${encodeURIComponent(conexao.accessToken)}`;
-  const res = await fetch(url);
+  if (!testEventCode) {
+    return {
+      ok: false,
+      erro: 'Cole o "código de teste de eventos" — pega em Gerenciador de Eventos > seu dataset > aba "Testar eventos".',
+    };
+  }
+
+  const agora = new Date();
+  const payload = {
+    data: [
+      {
+        event_name: "Lead",
+        event_time: Math.floor(agora.getTime() / 1000),
+        action_source: "chat",
+        event_id: `teste-conexao-${empresaId}-${agora.getTime()}`,
+        user_data: { fbc: `fb.1.${agora.getTime()}.teste` },
+      },
+    ],
+    test_event_code: testEventCode,
+    access_token: conexao.accessToken,
+  };
+
+  const res = await fetch(`https://graph.facebook.com/${VERSAO_GRAPH}/${conexao.pixelId}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   const resposta = await res.json().catch(() => ({}));
   if (!res.ok) {
-    return { ok: false, erro: resposta?.error?.message ?? `Erro ${res.status} ao validar o pixel.` };
+    return { ok: false, erro: resposta?.error?.message ?? `Erro ${res.status} ao testar a conexão.` };
   }
-  return { ok: true, nome: resposta.name, id: resposta.id };
+  return { ok: true, recebidos: resposta.events_received ?? 0 };
 }
 
 /**
