@@ -1,11 +1,16 @@
 /**
- * Fila de envio de conversões — em vez de mandar pro Google Ads na hora que
- * a venda é confirmada, a conversão fica "pendente" e é enviada automaticamente
- * duas vezes por dia (08h e 20h, horário de Brasília). O usuário também pode
- * forçar o envio antes da hora ou cancelar, na tela "Vendas para Envio".
+ * Fila de envio de conversões — em vez de mandar pro Google Ads/Meta Ads na
+ * hora que a venda é confirmada, a conversão fica "pendente" e é enviada
+ * automaticamente duas vezes por dia (08h e 20h, horário de Brasília). O
+ * usuário também pode forçar o envio antes da hora ou cancelar, na tela
+ * "Vendas para Envio". Cada venda vai pra UMA plataforma só: se tem gclid
+ * (veio de anúncio do Google) manda pro Google Ads; senão, se tem fbclid
+ * (veio de anúncio do Meta) manda pro Meta Ads — a classificação já acontece
+ * no clique original (ver `origem` em tracking.js), então nunca tem os dois.
  */
 import { listarFilaDeEnvioDevida, marcarEnvioResultado, buscarEmpresa } from "./db.js";
 import { enviarConversaoGoogle } from "./googleAds.js";
+import { enviarConversaoMeta } from "./metaAds.js";
 
 // Brasil não tem mais horário de verão desde 2019 — BRT = UTC-3 o ano todo.
 const OFFSET_BRASILIA_HORAS = 3;
@@ -43,25 +48,37 @@ export function formatarHorarioBrasilia(isoOuData) {
 }
 
 /**
- * Envia uma venda da fila pro Google Ads e registra o resultado — usado
- * tanto pelo agendador (08h/20h) quanto pelo botão "Enviar agora".
+ * Envia uma venda da fila pra plataforma certa (Google Ads ou Meta Ads) e
+ * registra o resultado — usado tanto pelo agendador (08h/20h) quanto pelo
+ * botão "Enviar agora".
  */
-export async function enviarVendaParaGoogleAds(conversa) {
+export async function enviarVendaDaFila(conversa) {
   const empresa = buscarEmpresa(conversa.empresa_id);
   if (!empresa) return { ok: false, erro: "Empresa não encontrada." };
   // Usa o horário real da venda (vendido_em), não o horário do envio — a
-  // conversão pode ficar horas na fila até 08h/20h, e o Google Ads espera o
-  // momento em que a conversão de fato aconteceu, não o do envio.
+  // conversão pode ficar horas na fila até 08h/20h, e a plataforma de anúncio
+  // espera o momento em que a conversão de fato aconteceu, não o do envio.
   const quando = conversa.vendido_em ? new Date(conversa.vendido_em + "Z") : undefined;
-  const r = await enviarConversaoGoogle(empresa.id, {
-    gclid: conversa.gclid,
-    valor: conversa.valor,
-    moeda: empresa.moeda,
-    quando,
-  });
+
+  const r = conversa.gclid
+    ? await enviarConversaoGoogle(empresa.id, {
+        gclid: conversa.gclid,
+        valor: conversa.valor,
+        moeda: empresa.moeda,
+        quando,
+      })
+    : await enviarConversaoMeta(empresa.id, {
+        fbclid: conversa.fbclid,
+        valor: conversa.valor,
+        moeda: empresa.moeda,
+        quando,
+        telefone: conversa.telefone,
+      });
+
+  const plataforma = conversa.gclid ? "Google Ads" : "Meta Ads";
   marcarEnvioResultado(conversa.id, {
     enviada: r.ok,
-    resposta: r.ok ? "Conversão enviada ao Google Ads." : r.erro,
+    resposta: r.ok ? `Conversão enviada ao ${plataforma}.` : r.erro,
   });
   return r.ok ? { ok: true } : { ok: false, erro: r.erro };
 }
@@ -71,7 +88,7 @@ export async function processarFilaDeEnvio() {
   const pendentes = listarFilaDeEnvioDevida();
   for (const conversa of pendentes) {
     try {
-      await enviarVendaParaGoogleAds(conversa);
+      await enviarVendaDaFila(conversa);
     } catch (e) {
       console.error(`[fila-envio] Falha ao processar conversa ${conversa.id}`, e);
     }

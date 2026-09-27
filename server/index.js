@@ -7,6 +7,7 @@ import "./db.js"; // garante que o schema é criado (e migrado) ao subir
 import { authRouter } from "./routes/auth.js";
 import { empresasRouter, empresaRouter } from "./routes/empresas.js";
 import { googleRouter, registrarCallbackGoogle } from "./routes/google.js";
+import { metaRouter } from "./routes/metaAds.js";
 import { whatsappRouter, whatsappWebhookRouter } from "./routes/whatsapp.js";
 import { trackPublicRouter } from "./routes/track.js";
 import { conversasRouter, dashboardRouter } from "./routes/conversas.js";
@@ -39,6 +40,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/empresas", exigirSessao, empresasRouter);
 app.use("/api/empresas/:empresaId", exigirSessao, carregarEmpresa, empresaRouter);
 app.use("/api/empresas/:empresaId/google", exigirSessao, carregarEmpresa, googleRouter);
+app.use("/api/empresas/:empresaId/meta", exigirSessao, carregarEmpresa, metaRouter);
 app.use("/api/empresas/:empresaId/whatsapp", exigirSessao, carregarEmpresa, whatsappRouter);
 app.use("/api/empresas/:empresaId/conversas", exigirSessao, carregarEmpresa, conversasRouter);
 app.use("/api/empresas/:empresaId/dashboard", exigirSessao, carregarEmpresa, dashboardRouter);

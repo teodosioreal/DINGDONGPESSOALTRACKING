@@ -5,12 +5,14 @@ import { api } from "../lib/api.js";
 const NOME_CONVERSAO = "LEADCONVERTIDO";
 
 const STATUS_ENVIO = {
-  enviado: { texto: "Enviada ao Google Ads", cor: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" },
+  enviado: { texto: "Enviada", cor: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" },
   pendente: { texto: "Na fila de envio", cor: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
   cancelado: { texto: "Envio cancelado", cor: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
   nao_enviado: { texto: "Ainda não enviada", cor: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400" },
   sem_rastreio: { texto: "Sem rastreio", cor: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500" },
 };
+
+const NOME_PLATAFORMA = { google: "Google Ads", meta: "Meta Ads" };
 
 function formatarMoeda(v, moeda) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(Number(v) || 0);
@@ -113,7 +115,7 @@ export default function Vendas() {
   }
 
   function baixarCsv() {
-    const csv = gerarCsvGoogleAds(rastreadas, moeda);
+    const csv = gerarCsvGoogleAds(vendasGoogle, moeda);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -130,14 +132,15 @@ export default function Vendas() {
 
   const rastreadas = vendas.filter((v) => v.rastreada);
   const semRastreio = vendas.filter((v) => !v.rastreada);
+  const vendasGoogle = rastreadas.filter((v) => v.gclid);
 
   return (
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Vendas</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Todas as vendas confirmadas. O que importa de verdade é o que tem rastreio (gclid) — é isso que vira
-          conversão no Google Ads.
+          Todas as vendas confirmadas. O que importa de verdade é o que tem rastreio (gclid do Google ou fbclid do
+          Meta) — é isso que vira conversão automática na plataforma de origem.
         </p>
       </div>
 
@@ -151,10 +154,10 @@ export default function Vendas() {
         </button>
         <button
           onClick={baixarCsv}
-          disabled={rastreadas.length === 0}
+          disabled={vendasGoogle.length === 0}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
         >
-          Baixar CSV pro Google Ads ({rastreadas.length})
+          Baixar CSV pro Google Ads ({vendasGoogle.length})
         </button>
       </div>
       {resultadoTeste && (
@@ -184,8 +187,9 @@ export default function Vendas() {
         </div>
       )}
       <p className="text-xs text-slate-400 dark:text-slate-500">
-        O CSV serve como backup manual — suba em Google Ads &gt; Conversões &gt; Uploads. As vendas já enviadas
-        automaticamente (08h/20h) não precisam ser subidas de novo, senão contam em dobro.
+        O CSV é só pro Google Ads e serve como backup manual — suba em Google Ads &gt; Conversões &gt; Uploads. As
+        vendas já enviadas automaticamente (08h/20h) não precisam ser subidas de novo, senão contam em dobro. Vendas
+        do Meta Ads não têm CSV — vão só pelo envio automático (Conversions API).
       </p>
 
       {rastreadas.length === 0 ? (
@@ -199,6 +203,7 @@ export default function Vendas() {
               <tr>
                 <th className="px-4 py-2">Cliente</th>
                 <th className="px-4 py-2">Valor</th>
+                <th className="px-4 py-2">Plataforma</th>
                 <th className="px-4 py-2">Campanha</th>
                 <th className="px-4 py-2">Data da venda</th>
                 <th className="px-4 py-2">Envio</th>
@@ -211,6 +216,7 @@ export default function Vendas() {
                   <tr key={v.id} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="px-4 py-2">{v.nome || v.telefone}</td>
                     <td className="px-4 py-2">{formatarMoeda(v.valor, moeda)}</td>
+                    <td className="px-4 py-2">{NOME_PLATAFORMA[v.plataforma] ?? "—"}</td>
                     <td className="px-4 py-2">{v.campanha || "Indefinido"}</td>
                     <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{formatarData(v.vendidoEm)}</td>
                     <td className="px-4 py-2">

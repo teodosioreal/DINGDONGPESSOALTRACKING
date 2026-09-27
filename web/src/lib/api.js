@@ -72,6 +72,13 @@ export const api = {
       body: { ativar },
     }),
 
+  // ---- Meta Ads ----
+  metaStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/meta/status`),
+  metaSalvarConexao: (empresaId, pixelId, accessToken) =>
+    chamar(`/api/empresas/${empresaId}/meta/conexao`, { method: "POST", body: { pixelId, accessToken } }),
+  metaDesconectar: (empresaId) => chamar(`/api/empresas/${empresaId}/meta/desconectar`, { method: "POST" }),
+  metaTestarConexao: (empresaId) => chamar(`/api/empresas/${empresaId}/meta/testar-conexao`),
+
   // ---- WhatsApp ----
   whatsappStatus: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/status`),
   whatsappQr: (empresaId) => chamar(`/api/empresas/${empresaId}/whatsapp/conectar/qr`, { method: "POST" }),

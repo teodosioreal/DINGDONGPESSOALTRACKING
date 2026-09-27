@@ -57,6 +57,15 @@ function criarSchema() {
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_google_contas_selecionadas ON google_contas_selecionadas(empresa_id, customer_id);
 
+  -- Conexão simplificada com o Meta Ads: sem OAuth, só um Pixel ID e um
+  -- token de acesso de longa duração gerados manualmente no Events Manager
+  -- (Configurações do evento > Conversions API > Gerar token de acesso).
+  CREATE TABLE IF NOT EXISTS meta_conexoes (
+    empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
+    pixel_id TEXT,
+    access_token TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS whatsapp_conexoes (
     empresa_id INTEGER PRIMARY KEY REFERENCES empresas(id) ON DELETE CASCADE,
     session_id TEXT,

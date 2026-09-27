@@ -84,6 +84,7 @@ export default function Layout({ aoSair }) {
         { to: `/app/empresas/${empresaId}`, label: "Painel", fim: true },
         { to: `/app/empresas/${empresaId}/conversas`, label: "Conversas", badge: naoLidas },
         { to: `/app/empresas/${empresaId}/google-ads`, label: "Google Ads" },
+        { to: `/app/empresas/${empresaId}/meta-ads`, label: "Meta Ads" },
         { to: `/app/empresas/${empresaId}/whatsapp`, label: "WhatsApp" },
         { to: `/app/empresas/${empresaId}/tracking`, label: "Instalar Rastreio" },
         { to: `/app/empresas/${empresaId}/regras-venda`, label: "Regras de Venda" },

@@ -6,6 +6,7 @@ import Login from "./pages/Login.jsx";
 import Empresas from "./pages/Empresas.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import GoogleAds from "./pages/GoogleAds.jsx";
+import MetaAds from "./pages/MetaAds.jsx";
 import WhatsApp from "./pages/WhatsApp.jsx";
 import Tracking from "./pages/Tracking.jsx";
 import Conversas from "./pages/Conversas.jsx";
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="empresas/:empresaId" element={<Dashboard />} />
         <Route path="empresas/:empresaId/conversas" element={<Conversas />} />
         <Route path="empresas/:empresaId/google-ads" element={<GoogleAds />} />
+        <Route path="empresas/:empresaId/meta-ads" element={<MetaAds />} />
         <Route path="empresas/:empresaId/whatsapp" element={<WhatsApp />} />
         <Route path="empresas/:empresaId/tracking" element={<Tracking />} />
         <Route path="empresas/:empresaId/regras-venda" element={<RegrasVenda />} />

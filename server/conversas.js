@@ -1,7 +1,7 @@
 import { db, cancelarEnvioNaFila, listarFilaDeEnvio } from "./db.js";
 import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
-import { proximoHorarioEnvio, formatarHorarioBrasilia, enviarVendaParaGoogleAds } from "./filaDeEnvio.js";
+import { proximoHorarioEnvio, formatarHorarioBrasilia, enviarVendaDaFila } from "./filaDeEnvio.js";
 
 /** Garante que existe uma conversa para o telefone (dentro da empresa) e devolve a linha. */
 function conversaDoTelefone(empresaId, telefone, nome) {
@@ -102,9 +102,10 @@ export function listarMensagens(conversaId) {
 }
 
 /**
- * Marca a venda. Se houver gclid, a conversão NÃO é enviada na hora — entra
- * na fila e é enviada automaticamente às 08h ou 20h (horário de Brasília), a
- * não ser que o usuário mande antes ou cancele em "Vendas para Envio".
+ * Marca a venda. Se houver gclid (Google) ou fbclid (Meta), a conversão NÃO
+ * é enviada na hora — entra na fila e é enviada automaticamente às 08h ou
+ * 20h (horário de Brasília), a não ser que o usuário mande antes ou cancele
+ * em "Vendas para Envio".
  *
  * O bloqueio de IP é um mecanismo separado (clique suspeito de anúncio, gera
  * exclusão direto nas campanhas do Google Ads) e não interfere aqui — uma
@@ -115,12 +116,13 @@ export async function confirmarVenda(empresa, conversa, valor) {
   let envioAgendadoPara = null;
   let respostaConversao;
 
-  if (conversa.gclid) {
+  if (conversa.gclid || conversa.fbclid) {
+    const plataforma = conversa.gclid ? "Google Ads" : "Meta Ads";
     filaStatus = "pendente";
     envioAgendadoPara = proximoHorarioEnvio().toISOString();
-    respostaConversao = `Venda marcada — a conversão entra na fila e é enviada automaticamente às ${formatarHorarioBrasilia(envioAgendadoPara)}. Você pode mandar antes ou cancelar em "Vendas para Envio".`;
+    respostaConversao = `Venda marcada — a conversão entra na fila e é enviada automaticamente ao ${plataforma} às ${formatarHorarioBrasilia(envioAgendadoPara)}. Você pode mandar antes ou cancelar em "Vendas para Envio".`;
   } else {
-    respostaConversao = "Sem gclid nesta conversa — venda marcada, mas nada foi enviado ao Google Ads.";
+    respostaConversao = "Sem rastreio nesta conversa — venda marcada, mas nada foi enviado.";
   }
 
   db.prepare(
@@ -134,14 +136,15 @@ export async function confirmarVenda(empresa, conversa, valor) {
 }
 
 /**
- * Todas as vendas confirmadas da empresa, com e sem rastreio (gclid) — pra
- * aba Vendas. `rastreada` é o que decide se a linha pode virar conversão no
- * Google Ads (sem gclid não tem como importar, nem manual nem automático).
+ * Todas as vendas confirmadas da empresa, com e sem rastreio (gclid/fbclid)
+ * — pra aba Vendas. `rastreada` é o que decide se a linha pode virar
+ * conversão em alguma plataforma (sem gclid nem fbclid não tem como
+ * importar, nem manual nem automático). `plataforma` diz qual das duas.
  */
 export function listarTodasVendas(empresaId) {
   const linhas = db
     .prepare(
-      `SELECT id, nome, telefone, valor, gclid, campanha, fila_status, conversao_enviada, conversao_resposta,
+      `SELECT id, nome, telefone, valor, gclid, fbclid, campanha, fila_status, conversao_enviada, conversao_resposta,
               vendido_em, criado_em
        FROM conversas
        WHERE empresa_id = ? AND status = 'vendido'
@@ -154,18 +157,21 @@ export function listarTodasVendas(empresaId) {
     telefone: v.telefone,
     valor: v.valor,
     gclid: v.gclid,
-    rastreada: Boolean(v.gclid),
+    fbclid: v.fbclid,
+    rastreada: Boolean(v.gclid || v.fbclid),
+    plataforma: v.gclid ? "google" : v.fbclid ? "meta" : null,
     campanha: v.campanha,
     vendidoEm: v.vendido_em ?? v.criado_em,
-    statusEnvio: !v.gclid
-      ? "sem_rastreio"
-      : v.fila_status === "enviado"
-        ? "enviado"
-        : v.fila_status === "cancelado"
-          ? "cancelado"
-          : v.fila_status === "pendente"
-            ? "pendente"
-            : "nao_enviado",
+    statusEnvio:
+      !v.gclid && !v.fbclid
+        ? "sem_rastreio"
+        : v.fila_status === "enviado"
+          ? "enviado"
+          : v.fila_status === "cancelado"
+            ? "cancelado"
+            : v.fila_status === "pendente"
+              ? "pendente"
+              : "nao_enviado",
   }));
 }
 
@@ -189,10 +195,10 @@ export async function enviarVendaAgora(conversa) {
   if (conversa.fila_status !== "pendente") {
     return { ok: false, erro: "Essa venda não está na fila de envio." };
   }
-  return enviarVendaParaGoogleAds(conversa);
+  return enviarVendaDaFila(conversa);
 }
 
-/** Cancela o envio de uma venda da fila — a conversão nunca é mandada pro Google Ads. */
+/** Cancela o envio de uma venda da fila — a conversão nunca é mandada pra plataforma de anúncio. */
 export function cancelarEnvio(conversa) {
   if (conversa.fila_status !== "pendente") {
     return { ok: false, erro: "Essa venda não está na fila de envio." };
