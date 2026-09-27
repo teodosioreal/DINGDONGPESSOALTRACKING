@@ -213,6 +213,17 @@ export default function Dashboard() {
                   <td className="px-4 py-2">{formatarMoeda(linha.receita, resumo.moeda)}</td>
                 </tr>
               ))}
+              <tr className="border-t border-slate-200 font-semibold dark:border-slate-700">
+                <td className="px-4 py-2">Total</td>
+                <td className="px-4 py-2">{resumo.porOrigem.reduce((soma, l) => soma + l.leads, 0)}</td>
+                <td className="px-4 py-2">{resumo.porOrigem.reduce((soma, l) => soma + l.vendas, 0)}</td>
+                <td className="px-4 py-2">
+                  {formatarMoeda(
+                    resumo.porOrigem.reduce((soma, l) => soma + l.receita, 0),
+                    resumo.moeda,
+                  )}
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -250,6 +261,11 @@ function ChecklistSetup({ empresaId, checklist }) {
       ok: checklist.googleConectado,
       label: "Google Ads conectado",
       link: `/app/empresas/${empresaId}/google-ads`,
+    },
+    {
+      ok: checklist.metaConectado,
+      label: "Meta Ads conectado",
+      link: `/app/empresas/${empresaId}/meta-ads`,
     },
     {
       ok: checklist.whatsappConfigurado,

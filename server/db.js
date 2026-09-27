@@ -492,10 +492,12 @@ export function checklistSetup(empresaId) {
   const temContaGoogle = db
     .prepare("SELECT 1 FROM google_contas_selecionadas WHERE empresa_id = ?")
     .get(empresaId);
+  const meta = db.prepare("SELECT pixel_id, access_token FROM meta_conexoes WHERE empresa_id = ?").get(empresaId);
   const whatsapp = db.prepare("SELECT session_id, api_key FROM whatsapp_conexoes WHERE empresa_id = ?").get(empresaId);
   const ultimoClique = db.prepare("SELECT MAX(criado_em) AS quando FROM clicks WHERE empresa_id = ?").get(empresaId);
   return {
     googleConectado: Boolean(google?.refresh_token && temContaGoogle),
+    metaConectado: Boolean(meta?.pixel_id && meta?.access_token),
     whatsappConfigurado: Boolean(whatsapp?.session_id && whatsapp?.api_key),
     regrasConfiguradas: Boolean(empresa?.palavras_chave?.trim()),
     ultimoCliqueEm: ultimoClique?.quando ?? null,
