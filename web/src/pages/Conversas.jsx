@@ -3,6 +3,23 @@ import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
 const NOME_ORIGEM = { google: "Google Ads", meta: "Meta Ads", sem_rastreio: "Sem rastreio" };
+const COR_ORIGEM = {
+  google: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400",
+  meta: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400",
+  sem_rastreio: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
+};
+
+function BadgeOrigem({ origem }) {
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+        COR_ORIGEM[origem] ?? COR_ORIGEM.sem_rastreio
+      }`}
+    >
+      {NOME_ORIGEM[origem] ?? origem}
+    </span>
+  );
+}
 
 export default function Conversas() {
   const { empresaId } = useParams();
@@ -89,7 +106,9 @@ export default function Conversas() {
                 <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">VENDA PROVÁVEL</span>
               )}
             </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{NOME_ORIGEM[c.origem] ?? c.origem}</span>
+            <div className="mt-1">
+              <BadgeOrigem origem={c.origem} />
+            </div>
           </button>
         ))}
         {conversas.length === 0 && (
@@ -107,7 +126,10 @@ export default function Conversas() {
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
               <div>
                 <p className="font-medium">{selecionada.nome || selecionada.telefone}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{selecionada.telefone}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{selecionada.telefone}</p>
+                  <BadgeOrigem origem={selecionada.origem} />
+                </div>
               </div>
               {selecionada.status !== "vendido" && (
                 <form onSubmit={marcarVenda} className="flex items-center gap-2">

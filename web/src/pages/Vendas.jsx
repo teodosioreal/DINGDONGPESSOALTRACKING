@@ -12,7 +12,6 @@ const STATUS_ENVIO = {
   sem_rastreio: { texto: "Sem rastreio", cor: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500" },
 };
 
-const NOME_PLATAFORMA = { google: "Google Ads", meta: "Meta Ads" };
 
 function formatarMoeda(v, moeda) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda || "BRL" }).format(Number(v) || 0);
@@ -44,6 +43,51 @@ function paraHorarioDeBrasiliaCsv(dataIsoUtc) {
 function csvCampo(valor) {
   const s = String(valor ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function SecaoPlataforma({ titulo, linhas, moeda }) {
+  return (
+    <div>
+      <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+        {titulo} ({linhas.length})
+      </h2>
+      {linhas.length === 0 ? (
+        <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          Nenhuma venda do {titulo} ainda.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+              <tr>
+                <th className="px-4 py-2">Cliente</th>
+                <th className="px-4 py-2">Valor</th>
+                <th className="px-4 py-2">Campanha</th>
+                <th className="px-4 py-2">Data da venda</th>
+                <th className="px-4 py-2">Envio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((v) => {
+                const st = STATUS_ENVIO[v.statusEnvio] ?? STATUS_ENVIO.nao_enviado;
+                return (
+                  <tr key={v.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2">{v.nome || v.telefone}</td>
+                    <td className="px-4 py-2">{formatarMoeda(v.valor, moeda)}</td>
+                    <td className="px-4 py-2">{v.campanha || "Indefinido"}</td>
+                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{formatarData(v.vendidoEm)}</td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.cor}`}>{st.texto}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -133,6 +177,7 @@ export default function Vendas() {
   const rastreadas = vendas.filter((v) => v.rastreada);
   const semRastreio = vendas.filter((v) => !v.rastreada);
   const vendasGoogle = rastreadas.filter((v) => v.gclid);
+  const vendasMeta = rastreadas.filter((v) => v.fbclid);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -192,43 +237,8 @@ export default function Vendas() {
         do Meta Ads não têm CSV — vão só pelo envio automático (Conversions API).
       </p>
 
-      {rastreadas.length === 0 ? (
-        <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          Nenhuma venda com rastreio ainda.
-        </p>
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-2">Cliente</th>
-                <th className="px-4 py-2">Valor</th>
-                <th className="px-4 py-2">Plataforma</th>
-                <th className="px-4 py-2">Campanha</th>
-                <th className="px-4 py-2">Data da venda</th>
-                <th className="px-4 py-2">Envio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rastreadas.map((v) => {
-                const st = STATUS_ENVIO[v.statusEnvio] ?? STATUS_ENVIO.nao_enviado;
-                return (
-                  <tr key={v.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="px-4 py-2">{v.nome || v.telefone}</td>
-                    <td className="px-4 py-2">{formatarMoeda(v.valor, moeda)}</td>
-                    <td className="px-4 py-2">{NOME_PLATAFORMA[v.plataforma] ?? "—"}</td>
-                    <td className="px-4 py-2">{v.campanha || "Indefinido"}</td>
-                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{formatarData(v.vendidoEm)}</td>
-                    <td className="px-4 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.cor}`}>{st.texto}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <SecaoPlataforma titulo="Google Ads" linhas={vendasGoogle} moeda={moeda} />
+      <SecaoPlataforma titulo="Meta Ads" linhas={vendasMeta} moeda={moeda} />
 
       <div>
         <button
