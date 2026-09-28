@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api.js";
 
-const NOME_CONVERSAO = "LEADCONVERTIDO";
+// Precisa bater exatamente com o nome criado em server/googleAds.js
+// (NOME_CONVERSAO) — é o que vai na coluna "Conversion Name" do CSV.
+const NOME_CONVERSAO = "COMPRAREALIZADA";
 
 const STATUS_ENVIO = {
   enviado: { texto: "Enviada", cor: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" },

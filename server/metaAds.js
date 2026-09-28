@@ -48,11 +48,12 @@ export async function testarConexaoMeta(empresaId, testEventCode) {
   const payload = {
     data: [
       {
-        event_name: "Lead",
+        event_name: "Purchase",
         event_time: Math.floor(agora.getTime() / 1000),
         action_source: "chat",
         event_id: `teste-conexao-${empresaId}-${agora.getTime()}`,
         user_data: { fbc: `fb.1.${agora.getTime()}.teste` },
+        custom_data: { value: 0, currency: "BRL" },
       },
     ],
     test_event_code: testEventCode,
@@ -73,10 +74,13 @@ export async function testarConexaoMeta(empresaId, testEventCode) {
 
 /**
  * Envia uma conversão (venda) pra Conversions API do Meta, pelo fbclid do
- * clique original. Como não guardamos o instante exato em que o fbclid foi
- * capturado (só o valor), o `fbc` é montado com o horário da própria venda —
- * é uma aproximação aceitável: o que a Meta usa pra atribuição é o fbclid
- * embutido no parâmetro, não a precisão do timestamp.
+ * clique original. Usa o evento padrão "Purchase" (não "Lead") de propósito
+ * — é isso que faz a venda aparecer na otimização/relatório de Compras das
+ * campanhas do Meta Ads, e exige `value`/`currency`, que já mandamos.
+ * Como não guardamos o instante exato em que o fbclid foi capturado (só o
+ * valor), o `fbc` é montado com o horário da própria venda — é uma
+ * aproximação aceitável: o que a Meta usa pra atribuição é o fbclid embutido
+ * no parâmetro, não a precisão do timestamp.
  */
 export async function enviarConversaoMeta(empresaId, { fbclid, valor, moeda = "BRL", quando, telefone }) {
   const conexao = conexaoMetaSalva(empresaId);
@@ -97,10 +101,10 @@ export async function enviarConversaoMeta(empresaId, { fbclid, valor, moeda = "B
   const payload = {
     data: [
       {
-        event_name: "Lead",
+        event_name: "Purchase",
         event_time: segundos,
         action_source: "chat",
-        event_id: `leadconvertido-${empresaId}-${fbclid}-${segundos}`,
+        event_id: `compra-${empresaId}-${fbclid}-${segundos}`,
         user_data: userData,
         custom_data: { value: Number(valor) || 0, currency: moeda },
       },

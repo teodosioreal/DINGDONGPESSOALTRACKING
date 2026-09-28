@@ -10,8 +10,8 @@ vendasRouter.get("/", (req, res) => {
 });
 
 /**
- * Confirma se a ação de conversão LEADCONVERTIDO existe e está pronta em
- * cada conta monitorada, sem mandar evento nenhum. Devolve 200 mesmo se
+ * Confirma se a ação de conversão de compra existe (ou cria automaticamente)
+ * e está pronta em cada conta monitorada, sem mandar evento nenhum. Devolve 200 mesmo se
  * alguma conta falhar — isso é um resultado válido do teste (com detalhes
  * por conta), não um erro de requisição; só usa 400 quando nem dá pra
  * testar (sem conexão, sem conta selecionada etc).

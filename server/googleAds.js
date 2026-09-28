@@ -13,7 +13,11 @@ const ESCOPO_ADS = "https://www.googleapis.com/auth/adwords";
 const ESCOPO_DATA_MANAGER = "https://www.googleapis.com/auth/datamanager";
 const ESCOPO_EMAIL = "openid email";
 const ESCOPOS = `${ESCOPO_ADS} ${ESCOPO_DATA_MANAGER} ${ESCOPO_EMAIL}`;
-export const NOME_CONVERSAO = "LEADCONVERTIDO";
+// Categoria PURCHASE (não LEAD) de propósito: é isso que faz a conversão
+// aparecer na aba "Compras" das campanhas no Google Ads, em vez de um "Lead"
+// genérico — a ação é criada automaticamente (ver acaoDeConversao) se ainda
+// não existir na conta, sem precisar de nenhum passo manual no Google Ads.
+export const NOME_CONVERSAO = "COMPRAREALIZADA";
 
 function versao() {
   return process.env.GOOGLE_ADS_API_VERSION ?? "v22";
@@ -666,32 +670,84 @@ export async function removerExclusaoIp(empresaId, resourceNames) {
   return avisos.length ? { ok: false, erro: avisos.join("; ") } : { ok: true };
 }
 
-async function acaoDeConversao(token, developerToken, customerId, loginCustomerId) {
+async function buscarAcaoDeConversao(token, developerToken, customerId, loginCustomerId) {
   const res = await fetch(`https://googleads.googleapis.com/${versao()}/customers/${customerId}/googleAds:search`, {
     method: "POST",
     headers: cabecalhos(token, developerToken, loginCustomerId),
     body: JSON.stringify({
-      query: `SELECT conversion_action.id, conversion_action.resource_name, conversion_action.status,
-                conversion_action.type
+      query: `SELECT conversion_action.id, conversion_action.status, conversion_action.type
               FROM conversion_action WHERE conversion_action.name = '${NOME_CONVERSAO}' LIMIT 1`,
     }),
   });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) return { erro: mensagemAmigavel(d.error?.message, res.status) };
-  const acao = d.results?.[0]?.conversionAction;
-  if (!acao?.id) {
-    return {
-      erro: `Crie no Google Ads uma ação de conversão offline chamada "${NOME_CONVERSAO}" (importação de conversões offline) e tente de novo.`,
-    };
-  }
-  return { acaoId: String(acao.id), status: acao.status ?? "", tipo: acao.type ?? "" };
+  return { acao: d.results?.[0]?.conversionAction ?? null };
 }
 
 /**
- * "Testar ação de conversão" — confirma que a ação LEADCONVERTIDO existe e
- * está pronta pra receber conversões em CADA conta monitorada, SEM mandar
- * nenhum evento fake pro Google Ads (não polui as métricas reais). É um
- * teste de configuração, não um teste de envio.
+ * Garante que a ação de conversão "COMPRAREALIZADA" existe na conta — se não
+ * existir ainda, cria automaticamente como categoria PURCHASE (é essa
+ * categoria que faz ela aparecer na aba "Compras" das campanhas no Google
+ * Ads). Não exige nenhum passo manual: na primeira venda enviada (ou no
+ * "Testar ação de conversão") a ação já é criada sozinha, pronta pra receber
+ * conversões por clique (GCLID).
+ */
+async function acaoDeConversao(token, developerToken, customerId, loginCustomerId) {
+  const primeira = await buscarAcaoDeConversao(token, developerToken, customerId, loginCustomerId);
+  if (primeira.erro) return { erro: primeira.erro };
+  if (primeira.acao?.id) {
+    return { acaoId: String(primeira.acao.id), status: primeira.acao.status ?? "", tipo: primeira.acao.type ?? "" };
+  }
+
+  const criacao = await fetch(
+    `https://googleads.googleapis.com/${versao()}/customers/${customerId}/conversionActions:mutate`,
+    {
+      method: "POST",
+      headers: cabecalhos(token, developerToken, loginCustomerId),
+      body: JSON.stringify({
+        operations: [
+          {
+            create: {
+              name: NOME_CONVERSAO,
+              type: "UPLOAD_CLICKS",
+              category: "PURCHASE",
+              status: "ENABLED",
+              countingType: "ONE_PER_CLICK",
+              valueSettings: { defaultValue: 0, defaultCurrencyCode: "BRL", alwaysUseDefaultValue: false },
+            },
+          },
+        ],
+      }),
+    },
+  );
+  const criacaoResposta = await criacao.json().catch(() => ({}));
+  if (criacao.ok) {
+    const novoId = (criacaoResposta.results?.[0]?.resourceName ?? "").split("/").pop();
+    if (novoId) return { acaoId: novoId, status: "ENABLED", tipo: "UPLOAD_CLICKS" };
+  }
+
+  // Corrida rara: duas chamadas simultâneas (ex: fila automática + "Enviar
+  // agora" no mesmo instante) podem tentar criar a mesma ação ao mesmo
+  // tempo — a segunda falha por nome duplicado. Nesse caso, busca de novo
+  // em vez de devolver erro: a essa altura ela já existe.
+  const erroCriacao = criacaoResposta.error?.message ?? "";
+  if (/duplicate|already exists/i.test(erroCriacao)) {
+    const segunda = await buscarAcaoDeConversao(token, developerToken, customerId, loginCustomerId);
+    if (segunda.acao?.id) {
+      return { acaoId: String(segunda.acao.id), status: segunda.acao.status ?? "", tipo: segunda.acao.type ?? "" };
+    }
+  }
+  return {
+    erro: `Não foi possível criar a ação de conversão automaticamente: ${mensagemAmigavel(erroCriacao, criacao.status)}`,
+  };
+}
+
+/**
+ * "Testar ação de conversão" — confirma que a ação de conversão existe (ou
+ * cria automaticamente, se ainda não existir) e está pronta pra receber
+ * conversões em CADA conta monitorada, SEM mandar nenhum evento fake pro
+ * Google Ads (não polui as métricas reais). É um teste de configuração, não
+ * um teste de envio.
  */
 export async function testarAcaoDeConversao(empresaId) {
   const c = lerCredenciaisApp();
@@ -755,7 +811,7 @@ export async function enviarConversaoGoogle(empresaId, { gclid, valor, moeda = "
     }
 
     const destino = {
-      reference: "leadconvertido",
+      reference: "compra",
       operatingAccount: { accountType: "GOOGLE_ADS", accountId: conta.customerId },
       productDestinationId: acao.acaoId,
     };
@@ -766,7 +822,7 @@ export async function enviarConversaoGoogle(empresaId, { gclid, valor, moeda = "
       destinations: [destino],
       events: [
         {
-          destinationReferences: ["leadconvertido"],
+          destinationReferences: ["compra"],
           adIdentifiers: { gclid },
           eventTimestamp: data.toISOString(),
           conversionValue: Number(valor) || 0,
