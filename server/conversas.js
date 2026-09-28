@@ -194,6 +194,7 @@ export function listarFila(empresaId) {
     telefone: c.telefone,
     valor: c.valor,
     campanha: c.campanha,
+    plataforma: c.gclid ? "google" : c.fbclid || c.ctwa_clid ? "meta" : null,
     envioAgendadoPara: c.envio_agendado_para,
     // Se já tentou pelo menos uma vez e continua pendente, foi porque falhou —
     // conversao_resposta guarda o erro dessa última tentativa.

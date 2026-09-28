@@ -278,10 +278,12 @@ function ChecklistSetup({ empresaId, checklist }) {
       link: `/app/empresas/${empresaId}/regras-venda`,
     },
     {
-      ok: Boolean(checklist.ultimoCliqueEm),
+      ok: checklist.pixelInstalado,
       label: checklist.ultimoCliqueEm
         ? `Script instalado (último clique ${formatarTempoRelativo(checklist.ultimoCliqueEm)})`
-        : "Script de rastreio ainda não recebeu nenhum clique",
+        : checklist.pixelInstalado
+          ? "Script instalado (histórico de visitas limpo)"
+          : "Script de rastreio ainda não recebeu nenhum clique",
       link: `/app/empresas/${empresaId}/tracking`,
     },
   ];

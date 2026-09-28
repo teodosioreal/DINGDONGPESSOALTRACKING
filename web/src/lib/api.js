@@ -122,6 +122,7 @@ export const api = {
     }),
   economiaIp: (empresaId, periodo) =>
     chamar(`/api/empresas/${empresaId}/ip-bloqueio/economia?periodo=${encodeURIComponent(periodo)}`),
+  limparVisitasIp: (empresaId) => chamar(`/api/empresas/${empresaId}/ip-bloqueio/limpar`, { method: "POST" }),
 
   // ---- Vendas ----
   vendas: (empresaId) => chamar(`/api/empresas/${empresaId}/vendas`),

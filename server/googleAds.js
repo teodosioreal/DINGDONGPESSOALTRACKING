@@ -432,6 +432,68 @@ export async function listarCampanhas(empresaId, periodo) {
   return { campanhas, avisos: avisos.length ? avisos : null };
 }
 
+// Cache em memória (id numérico -> nome), pra não bater na API do Google a
+// cada carregamento da aba Vendas/Painel. O `campanha` que chega no clique é
+// o que o Google manda no ValueTrack {campaignid} — só o número, sem nome —
+// então resolve pro nome de verdade aqui, uma vez, e guarda por um tempo.
+const cacheNomeCampanha = new Map(); // chave `${empresaId}:${id}` -> { nome, quando }
+const TTL_CACHE_NOME_CAMPANHA_MS = 60 * 60 * 1000;
+
+/**
+ * Resolve IDs numéricos de campanha (vindos do ValueTrack {campaignid}) pro
+ * nome de verdade, buscando nas contas do Google Ads que a empresa monitora.
+ * Devolve um Map id -> nome; IDs que não der pra resolver (conta não
+ * conectada, campanha apagada, sem permissão etc.) simplesmente não entram
+ * no Map — quem chama mantém o ID como estava nesse caso.
+ */
+export async function nomesDeCampanhas(empresaId, idsNumericos) {
+  const idsUnicos = [...new Set(idsNumericos)].filter((id) => /^\d+$/.test(id));
+  const resultado = new Map();
+  if (idsUnicos.length === 0) return resultado;
+
+  const agora = Date.now();
+  const faltando = [];
+  for (const id of idsUnicos) {
+    const cache = cacheNomeCampanha.get(`${empresaId}:${id}`);
+    if (cache && agora - cache.quando < TTL_CACHE_NOME_CAMPANHA_MS) resultado.set(id, cache.nome);
+    else faltando.push(id);
+  }
+  if (faltando.length === 0) return resultado;
+
+  const c = lerCredenciaisApp();
+  if (c.erro) return resultado;
+  const { refreshToken } = conexaoSalva(empresaId);
+  if (!refreshToken) return resultado;
+  const contas = contasSelecionadasDe(empresaId);
+  if (contas.length === 0) return resultado;
+  const auth = await obterAccessToken(refreshToken);
+  if (!auth.token) return resultado;
+
+  for (const conta of contas) {
+    const res = await fetch(
+      `https://googleads.googleapis.com/${versao()}/customers/${conta.customerId}/googleAds:search`,
+      {
+        method: "POST",
+        headers: cabecalhos(auth.token, c.developerToken, conta.loginCustomerId),
+        body: JSON.stringify({
+          query: `SELECT campaign.id, campaign.name FROM campaign WHERE campaign.id IN (${faltando.join(",")})`,
+        }),
+      },
+    );
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) continue;
+    for (const r of d.results ?? []) {
+      const id = String(r.campaign?.id ?? "");
+      const nome = r.campaign?.name ?? "";
+      if (id && nome) {
+        resultado.set(id, nome);
+        cacheNomeCampanha.set(`${empresaId}:${id}`, { nome, quando: agora });
+      }
+    }
+  }
+  return resultado;
+}
+
 /** Pausa ou reativa uma campanha direto pelo app. */
 export async function definirStatusCampanha(empresaId, customerId, campanhaId, ativar) {
   const c = lerCredenciaisApp();

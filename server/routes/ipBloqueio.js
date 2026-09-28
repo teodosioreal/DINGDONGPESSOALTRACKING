@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listarVisitasPorIp, listarIpsBloqueados, atualizarConfigBloqueioAuto } from "../db.js";
+import { listarVisitasPorIp, listarIpsBloqueados, atualizarConfigBloqueioAuto, limparVisitas } from "../db.js";
 import { bloquearIpComGoogleAds, desbloquearIpComGoogleAds } from "../ipBloqueio.js";
 import { metricasCampanhasSelecionadas } from "../googleAds.js";
 
@@ -64,6 +64,12 @@ ipBloqueioRouter.post("/desbloquear", async (req, res) => {
   if (!ip) return res.status(400).json({ erro: "IP inválido." });
   const r = await desbloquearIpComGoogleAds(req.empresaId, ip);
   res.json({ ok: true, avisoGoogle: r.ok ? null : r.erro });
+});
+
+/** Limpa o histórico de visitas (tabela local de cliques) só pra deixar a tela enxuta — não desbloqueia IP nem mexe no Google Ads. */
+ipBloqueioRouter.post("/limpar", (req, res) => {
+  limparVisitas(req.empresaId);
+  res.json({ ok: true });
 });
 
 /** Card "Você economizou" — cliques inválidos × CPC médio, das campanhas monitoradas na aba Google Ads. */

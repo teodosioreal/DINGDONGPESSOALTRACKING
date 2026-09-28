@@ -239,6 +239,7 @@ function migrarColunasNovas() {
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_escopo", "TEXT NOT NULL DEFAULT 'ativas'");
   adicionarColuna("empresas", "tracking_token", "TEXT");
+  adicionarColuna("empresas", "primeiro_clique_em", "TEXT");
   adicionarColuna("ips_bloqueados", "motivo", "TEXT");
   adicionarColuna("ips_bloqueados", "google_criterios", "TEXT");
   adicionarColuna("ips_bloqueados", "google_erro", "TEXT");
@@ -253,6 +254,14 @@ function migrarColunasNovas() {
     db.prepare("UPDATE empresas SET tracking_token = ? WHERE id = ?").run(randomBytes(16).toString("hex"), e.id);
   }
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_empresas_tracking_token ON empresas(tracking_token);");
+
+  // Empresas que já tinham cliques registrados antes de primeiro_clique_em
+  // existir marcam retroativamente (senão o pixel "instalado" some do
+  // checklist assim que o histórico de visitas for limpo).
+  db.exec(`
+    UPDATE empresas SET primeiro_clique_em = (SELECT MIN(criado_em) FROM clicks WHERE clicks.empresa_id = empresas.id)
+    WHERE primeiro_clique_em IS NULL AND EXISTS(SELECT 1 FROM clicks WHERE clicks.empresa_id = empresas.id)
+  `);
 
   // Uma vez só: empresas que já tinham escolhido 1 conta no modelo antigo
   // (google_conexoes.customer_id) migram pra virar a primeira conta
@@ -312,7 +321,7 @@ export function listarEmpresas() {
               (m.pixel_id IS NOT NULL AND m.access_token IS NOT NULL) AS metaConectado,
               (w.session_id IS NOT NULL AND w.api_key IS NOT NULL) AS whatsappConfigurado,
               (e.palavras_chave IS NOT NULL AND TRIM(e.palavras_chave) != '') AS regrasConfiguradas,
-              EXISTS(SELECT 1 FROM clicks c WHERE c.empresa_id = e.id) AS pixelInstalado
+              (e.primeiro_clique_em IS NOT NULL) AS pixelInstalado
        FROM empresas e
        LEFT JOIN google_conexoes g ON g.empresa_id = e.id
        LEFT JOIN meta_conexoes m ON m.empresa_id = e.id
@@ -427,24 +436,45 @@ export function atualizarConfigBloqueioAuto(empresaId, { ativo, cliques, minutos
   ).run(ativo ? 1 : 0, cliques, minutos, escopo === "todas" ? "todas" : "ativas", empresaId);
 }
 
-/** Visitas agrupadas por IP (mais recentes primeiro), pra tela de Bloqueio de IP. */
+/**
+ * Visitas agrupadas por IP (mais recentes primeiro), pra tela de Bloqueio de
+ * IP. IPs já bloqueados sempre aparecem (com 0 visitas se não tiverem clique
+ * recente) mesmo depois de "Limpar histórico" — senão um IP bloqueado some
+ * da lista e não dá mais pra desbloquear ele pela tela.
+ */
 export function listarVisitasPorIp(empresaId) {
   return db
     .prepare(
-      `SELECT ip,
-              COUNT(*) AS visitas,
-              MAX(criado_em) AS ultima_visita,
-              MAX(duracao_segundos) AS duracao_segundos,
-              MAX(CASE WHEN origem != 'sem_rastreio' THEN 1 ELSE 0 END) AS veioDeAnuncio,
-              MAX(CASE WHEN origem = 'google' THEN 1 ELSE 0 END) AS veioDeGoogle,
-              MAX(CASE WHEN origem = 'meta' THEN 1 ELSE 0 END) AS veioDeMeta
-       FROM clicks
-       WHERE empresa_id = ? AND ip IS NOT NULL AND ip != ''
-       GROUP BY ip
+      `SELECT ip, visitas, ultima_visita, duracao_segundos, veioDeAnuncio, veioDeGoogle, veioDeMeta FROM (
+         SELECT ip,
+                COUNT(*) AS visitas,
+                MAX(criado_em) AS ultima_visita,
+                MAX(duracao_segundos) AS duracao_segundos,
+                MAX(CASE WHEN origem != 'sem_rastreio' THEN 1 ELSE 0 END) AS veioDeAnuncio,
+                MAX(CASE WHEN origem = 'google' THEN 1 ELSE 0 END) AS veioDeGoogle,
+                MAX(CASE WHEN origem = 'meta' THEN 1 ELSE 0 END) AS veioDeMeta
+         FROM clicks
+         WHERE empresa_id = @empresaId AND ip IS NOT NULL AND ip != ''
+         GROUP BY ip
+
+         UNION ALL
+
+         SELECT b.ip, 0 AS visitas, b.criado_em AS ultima_visita, NULL AS duracao_segundos,
+                0 AS veioDeAnuncio, 0 AS veioDeGoogle, 0 AS veioDeMeta
+         FROM ips_bloqueados b
+         WHERE b.empresa_id = @empresaId AND NOT EXISTS (
+           SELECT 1 FROM clicks c WHERE c.empresa_id = b.empresa_id AND c.ip = b.ip
+         )
+       )
        ORDER BY ultima_visita DESC
        LIMIT 200`,
     )
-    .all(empresaId);
+    .all({ empresaId });
+}
+
+/** Apaga o histórico de visitas (tabela `clicks`) dessa empresa — só pra deixar a tela de Bloqueio de IP limpa. Não desbloqueia nenhum IP nem mexe nas exclusões já aplicadas no Google Ads. */
+export function limparVisitas(empresaId) {
+  db.prepare("DELETE FROM clicks WHERE empresa_id = ?").run(empresaId);
 }
 
 /* --------------------------------------------------------- fila de envio */
@@ -500,13 +530,22 @@ export function checklistSetup(empresaId) {
   const meta = db.prepare("SELECT pixel_id, access_token FROM meta_conexoes WHERE empresa_id = ?").get(empresaId);
   const whatsapp = db.prepare("SELECT session_id, api_key FROM whatsapp_conexoes WHERE empresa_id = ?").get(empresaId);
   const ultimoClique = db.prepare("SELECT MAX(criado_em) AS quando FROM clicks WHERE empresa_id = ?").get(empresaId);
+  const instalado = db.prepare("SELECT primeiro_clique_em FROM empresas WHERE id = ?").get(empresaId);
   return {
     googleConectado: Boolean(google?.refresh_token && temContaGoogle),
     metaConectado: Boolean(meta?.pixel_id && meta?.access_token),
     whatsappConfigurado: Boolean(whatsapp?.session_id && whatsapp?.api_key),
     regrasConfiguradas: Boolean(empresa?.palavras_chave?.trim()),
+    pixelInstalado: Boolean(instalado?.primeiro_clique_em),
     ultimoCliqueEm: ultimoClique?.quando ?? null,
   };
+}
+
+/** Marca (uma única vez) quando o pixel dessa empresa recebeu o primeiro clique — sobrevive a "Limpar histórico" na aba Bloqueio de IP. */
+export function marcarPrimeiroClique(empresaId) {
+  db.prepare("UPDATE empresas SET primeiro_clique_em = COALESCE(primeiro_clique_em, datetime('now')) WHERE id = ?").run(
+    empresaId,
+  );
 }
 
 /* -------------------------------------------------------- config global */

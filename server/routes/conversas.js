@@ -14,7 +14,7 @@ import {
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
-import { metricasCampanhasSelecionadas } from "../googleAds.js";
+import { metricasCampanhasSelecionadas, nomesDeCampanhas } from "../googleAds.js";
 
 export const conversasRouter = Router({ mergeParams: true });
 
@@ -79,9 +79,24 @@ dashboardRouter.get("/checklist", (req, res) => {
   res.json(checklistSetup(req.empresaId));
 });
 
-/** Vendas esperando o envio automático (08h/20h) — tela "Vendas para Envio". */
-dashboardRouter.get("/fila-envio", (req, res) => {
-  res.json({ fila: listarFila(req.empresaId) });
+/**
+ * Vendas esperando o envio automático (08h/20h) — tela "Vendas para Envio".
+ * Mesma resolução de ID pra nome de campanha que a aba Vendas (ver
+ * routes/vendas.js) — senão a mesma venda mostraria o ID numérico aqui e o
+ * nome de verdade lá, assim que ela é enviada.
+ */
+dashboardRouter.get("/fila-envio", async (req, res) => {
+  const fila = listarFila(req.empresaId);
+  const idsParaResolver = fila
+    .filter((v) => v.plataforma === "google" && v.campanha && /^\d+$/.test(v.campanha))
+    .map((v) => v.campanha);
+  if (idsParaResolver.length > 0) {
+    const nomes = await nomesDeCampanhas(req.empresaId, idsParaResolver);
+    for (const v of fila) {
+      if (nomes.has(v.campanha)) v.campanha = nomes.get(v.campanha);
+    }
+  }
+  res.json({ fila });
 });
 
 dashboardRouter.post("/fila-envio/:id/enviar-agora", async (req, res) => {

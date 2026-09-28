@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { db, buscarEmpresa, ipEstaBloqueado, contarCliquesRecentesDoIp } from "./db.js";
+import { db, buscarEmpresa, ipEstaBloqueado, contarCliquesRecentesDoIp, marcarPrimeiroClique } from "./db.js";
 import { bloquearIpComGoogleAds } from "./ipBloqueio.js";
 
 /** Código curto embutido na mensagem pré-preenchida do link do WhatsApp. */
@@ -23,6 +23,7 @@ export function registrarClique({ empresaId, codigo, gclid, fbclid, urlOrigem, i
     ip: ip ?? null,
     campanha: campanha ?? null,
   });
+  marcarPrimeiroClique(empresaId);
 
   if (origem !== "sem_rastreio" && ip) {
     verificarCliqueSuspeito(empresaId, ip);

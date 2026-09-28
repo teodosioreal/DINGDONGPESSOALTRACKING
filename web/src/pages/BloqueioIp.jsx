@@ -38,6 +38,7 @@ export default function BloqueioIp() {
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState("");
   const [salvandoConfig, setSalvandoConfig] = useState(false);
+  const [limpando, setLimpando] = useState(false);
   const [periodo, setPeriodo] = useState("30dias");
   const [economia, setEconomia] = useState(null);
   const [moeda, setMoeda] = useState("BRL");
@@ -87,6 +88,22 @@ export default function BloqueioIp() {
       setErro(e.message);
     } finally {
       setProcessando("");
+    }
+  }
+
+  async function limparHistorico() {
+    if (!confirm("Limpar o histórico de visitas? IPs já bloqueados continuam bloqueados — só a lista de visitas fica vazia.")) {
+      return;
+    }
+    setLimpando(true);
+    setErro("");
+    try {
+      await api.limparVisitasIp(empresaId);
+      await carregar();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setLimpando(false);
     }
   }
 
@@ -252,6 +269,18 @@ export default function BloqueioIp() {
           </div>
           {avisoConfig && <p className="text-sm text-green-700 dark:text-green-400">{avisoConfig}</p>}
         </form>
+      )}
+
+      {!carregando && visitas.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={limparHistorico}
+            disabled={limpando}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            {limpando ? "Limpando…" : "Limpar histórico de visitas"}
+          </button>
+        </div>
       )}
 
       {carregando ? (
