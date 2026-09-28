@@ -233,6 +233,7 @@ function migrarColunasNovas() {
   adicionarColuna("conversas", "fila_tentativas", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("conversas", "nao_lida", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("conversas", "vendido_em", "TEXT");
+  adicionarColuna("conversas", "ctwa_clid", "TEXT");
   adicionarColuna("empresas", "bloqueio_auto_ativo", "INTEGER NOT NULL DEFAULT 1");
   adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");

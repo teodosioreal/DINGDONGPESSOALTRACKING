@@ -203,6 +203,28 @@ export function empresaDoWebhook(req) {
 }
 
 /**
+ * Anúncios do tipo "clique para o WhatsApp" mandam a pessoa direto pro
+ * WhatsApp, sem passar pelo site — nesse caso não existe gclid/fbclid pra
+ * capturar (o t.js nunca roda). O WhatsApp embute o contexto do anúncio
+ * (`externalAdReply`, incluindo o `ctwaClid`, equivalente ao fbclid pra esse
+ * tipo de anúncio) na PRIMEIRA mensagem da conversa — é isso que faz o
+ * próprio app do WhatsApp mostrar o preview do anúncio no topo do chat. Só
+ * vem em mensagens com contextInfo (extendedTextMessage/imageMessage/
+ * videoMessage) — mensagens de texto puro (`conversation`) não carregam.
+ */
+function extrairAnuncio(msg) {
+  const contextInfo =
+    msg.extendedTextMessage?.contextInfo ?? msg.imageMessage?.contextInfo ?? msg.videoMessage?.contextInfo ?? null;
+  const ad = contextInfo?.externalAdReply;
+  if (!ad) return null;
+  return {
+    ctwaClid: ad.ctwaClid || ad.ctwa_clid || null,
+    titulo: ad.title ?? null,
+    sourceId: ad.sourceId ?? null,
+  };
+}
+
+/**
  * Normaliza o payload do webhook messages.upsert da Evolution API. Outros
  * eventos (connection.update, chats.upsert etc.) podem chegar na mesma URL
  * quando o webhook não está filtrado por evento — são ignorados aqui.
@@ -210,7 +232,7 @@ export function empresaDoWebhook(req) {
 export function normalizarPayloadInbound(bruto) {
   const cru = bruto ?? {};
   if (cru.event && cru.event !== "messages.upsert") {
-    return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined };
+    return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined, anuncio: null };
   }
   const dado = typeof cru.data === "object" && cru.data ? cru.data : cru;
   const remoteJid = String(dado.key?.remoteJid ?? "");
@@ -222,5 +244,6 @@ export function normalizarPayloadInbound(bruto) {
   );
   const deMim = dado.key?.fromMe === true;
   const nome = dado.pushName ?? undefined;
-  return { telefone, texto, deMim, grupo, nome };
+  const anuncio = extrairAnuncio(msg);
+  return { telefone, texto, deMim, grupo, nome, anuncio };
 }

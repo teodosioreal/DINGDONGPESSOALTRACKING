@@ -69,6 +69,7 @@ export async function enviarVendaDaFila(conversa) {
       })
     : await enviarConversaoMeta(empresa.id, {
         fbclid: conversa.fbclid,
+        ctwaClid: conversa.ctwa_clid,
         valor: conversa.valor,
         moeda: empresa.moeda,
         quando,

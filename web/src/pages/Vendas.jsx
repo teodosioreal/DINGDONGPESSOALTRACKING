@@ -178,8 +178,8 @@ export default function Vendas() {
 
   const rastreadas = vendas.filter((v) => v.rastreada);
   const semRastreio = vendas.filter((v) => !v.rastreada);
-  const vendasGoogle = rastreadas.filter((v) => v.gclid);
-  const vendasMeta = rastreadas.filter((v) => v.fbclid);
+  const vendasGoogle = rastreadas.filter((v) => v.plataforma === "google");
+  const vendasMeta = rastreadas.filter((v) => v.plataforma === "meta");
 
   return (
     <div className="max-w-4xl space-y-6">

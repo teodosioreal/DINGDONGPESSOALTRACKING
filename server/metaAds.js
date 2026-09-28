@@ -73,44 +73,53 @@ export async function testarConexaoMeta(empresaId, testEventCode) {
 }
 
 /**
- * Envia uma conversão (venda) pra Conversions API do Meta, pelo fbclid do
- * clique original. Usa o evento padrão "Purchase" (não "Lead") de propósito
- * — é isso que faz a venda aparecer na otimização/relatório de Compras das
- * campanhas do Meta Ads, e exige `value`/`currency`, que já mandamos.
- * Como não guardamos o instante exato em que o fbclid foi capturado (só o
- * valor), o `fbc` é montado com o horário da própria venda — é uma
- * aproximação aceitável: o que a Meta usa pra atribuição é o fbclid embutido
- * no parâmetro, não a precisão do timestamp.
+ * Envia uma conversão (venda) pra Conversions API do Meta. Usa o evento
+ * padrão "Purchase" (não "Lead") de propósito — é isso que faz a venda
+ * aparecer na otimização/relatório de Compras das campanhas do Meta Ads, e
+ * exige `value`/`currency`, que já mandamos.
+ *
+ * Duas origens possíveis, com formatos diferentes de evento:
+ *  - fbclid (clicou num anúncio, foi pro site, depois pro WhatsApp): manda
+ *    `fbc` com action_source "chat". Como não guardamos o instante exato em
+ *    que o fbclid foi capturado, o `fbc` é montado com o horário da própria
+ *    venda — aproximação aceitável, o que atribui é o fbclid embutido, não a
+ *    precisão do timestamp.
+ *  - ctwaClid (anúncio "clique para o WhatsApp" — nunca passou pelo site):
+ *    formato específico que a própria Meta documenta pra esse tipo de
+ *    anúncio — action_source "business_messaging" + messaging_channel
+ *    "whatsapp", com ctwa_clid dentro de user_data em vez de fbc.
  */
-export async function enviarConversaoMeta(empresaId, { fbclid, valor, moeda = "BRL", quando, telefone }) {
+export async function enviarConversaoMeta(empresaId, { fbclid, ctwaClid, valor, moeda = "BRL", quando, telefone }) {
   const conexao = conexaoMetaSalva(empresaId);
   if (!conexao.pixelId || !conexao.accessToken) {
     return { ok: false, erro: "Conecte o Meta Ads primeiro (Pixel ID e token de acesso)." };
   }
-  if (!fbclid) return { ok: false, erro: "Essa venda não tem fbclid." };
+  if (!fbclid && !ctwaClid) return { ok: false, erro: "Essa venda não tem fbclid nem ctwa_clid." };
 
   const data = quando ?? new Date();
   const segundos = Math.floor(data.getTime() / 1000);
 
-  const userData = { fbc: `fb.1.${data.getTime()}.${fbclid}` };
+  const userData = fbclid ? { fbc: `fb.1.${data.getTime()}.${fbclid}` } : { ctwa_clid: ctwaClid };
   const digitosTelefone = String(telefone ?? "").replace(/\D/g, "");
   if (digitosTelefone) {
     userData.ph = [createHash("sha256").update(digitosTelefone).digest("hex")];
   }
 
-  const payload = {
-    data: [
-      {
-        event_name: "Purchase",
-        event_time: segundos,
-        action_source: "chat",
-        event_id: `compra-${empresaId}-${fbclid}-${segundos}`,
-        user_data: userData,
-        custom_data: { value: Number(valor) || 0, currency: moeda },
-      },
-    ],
-    access_token: conexao.accessToken,
+  const evento = {
+    event_name: "Purchase",
+    event_time: segundos,
+    event_id: `compra-${empresaId}-${fbclid ?? ctwaClid}-${segundos}`,
+    user_data: userData,
+    custom_data: { value: Number(valor) || 0, currency: moeda },
   };
+  if (fbclid) {
+    evento.action_source = "chat";
+  } else {
+    evento.action_source = "business_messaging";
+    evento.messaging_channel = "whatsapp";
+  }
+
+  const payload = { data: [evento], access_token: conexao.accessToken };
 
   const res = await fetch(`https://graph.facebook.com/${VERSAO_GRAPH}/${conexao.pixelId}/events`, {
     method: "POST",

@@ -20,17 +20,26 @@ function conversaDoTelefone(empresaId, telefone, nome) {
  * código de rastreio na primeira mensagem (vindo do link do WhatsApp),
  * grava o histórico e roda a detecção de venda por palavra-chave.
  */
-export async function registrarMensagemRecebida(empresa, { telefone, texto, nome }) {
+export async function registrarMensagemRecebida(empresa, { telefone, texto, nome, anuncio }) {
   const empresaId = empresa.id;
   let conversa = conversaDoTelefone(empresaId, telefone, nome);
 
-  const codigo = extrairCodigoDoTexto(texto);
-  if (codigo && conversa.origem === "sem_rastreio") {
-    const clique = buscarCliquePorCodigo(codigo);
+  if (conversa.origem === "sem_rastreio") {
+    const codigo = extrairCodigoDoTexto(texto);
+    const clique = codigo ? buscarCliquePorCodigo(codigo) : null;
     if (clique) {
       db.prepare(
         "UPDATE conversas SET gclid = ?, fbclid = ?, origem = ?, ip = ?, campanha = ?, atualizado_em = datetime('now') WHERE id = ?",
       ).run(clique.gclid, clique.fbclid, clique.origem, clique.ip, clique.campanha, conversa.id);
+    } else if (anuncio) {
+      // Anúncio "clique para o WhatsApp": a pessoa nunca passou pelo site,
+      // não tem gclid/fbclid nem código de rastreio — mas o próprio WhatsApp
+      // já entrega o contexto do anúncio na mensagem. Sem ctwaClid ainda dá
+      // pra confirmar que veio de um anúncio do Meta (fica sem valor pra
+      // mandar conversão de volta, mas a origem já aparece certa no painel).
+      db.prepare(
+        "UPDATE conversas SET origem = 'meta', ctwa_clid = ?, atualizado_em = datetime('now') WHERE id = ?",
+      ).run(anuncio.ctwaClid, conversa.id);
     }
   }
 
@@ -116,7 +125,7 @@ export async function confirmarVenda(empresa, conversa, valor) {
   let envioAgendadoPara = null;
   let respostaConversao;
 
-  if (conversa.gclid || conversa.fbclid) {
+  if (conversa.gclid || conversa.fbclid || conversa.ctwa_clid) {
     const plataforma = conversa.gclid ? "Google Ads" : "Meta Ads";
     filaStatus = "pendente";
     envioAgendadoPara = proximoHorarioEnvio().toISOString();
@@ -136,16 +145,18 @@ export async function confirmarVenda(empresa, conversa, valor) {
 }
 
 /**
- * Todas as vendas confirmadas da empresa, com e sem rastreio (gclid/fbclid)
- * — pra aba Vendas. `rastreada` é o que decide se a linha pode virar
- * conversão em alguma plataforma (sem gclid nem fbclid não tem como
- * importar, nem manual nem automático). `plataforma` diz qual das duas.
+ * Todas as vendas confirmadas da empresa, com e sem rastreio (gclid/fbclid/
+ * ctwa_clid) — pra aba Vendas. `rastreada` é o que decide se a linha pode
+ * virar conversão em alguma plataforma (sem nenhum dos três não tem como
+ * importar, nem manual nem automático). `plataforma` diz qual das duas —
+ * ctwa_clid é de anúncio "clique para o WhatsApp" do Meta, sem passar pelo
+ * site (por isso conta como Meta mesmo sem fbclid).
  */
 export function listarTodasVendas(empresaId) {
   const linhas = db
     .prepare(
-      `SELECT id, nome, telefone, valor, gclid, fbclid, campanha, fila_status, conversao_enviada, conversao_resposta,
-              vendido_em, criado_em
+      `SELECT id, nome, telefone, valor, gclid, fbclid, ctwa_clid, campanha, fila_status, conversao_enviada,
+              conversao_resposta, vendido_em, criado_em
        FROM conversas
        WHERE empresa_id = ? AND status = 'vendido'
        ORDER BY COALESCE(vendido_em, criado_em) DESC`,
@@ -158,12 +169,12 @@ export function listarTodasVendas(empresaId) {
     valor: v.valor,
     gclid: v.gclid,
     fbclid: v.fbclid,
-    rastreada: Boolean(v.gclid || v.fbclid),
-    plataforma: v.gclid ? "google" : v.fbclid ? "meta" : null,
+    rastreada: Boolean(v.gclid || v.fbclid || v.ctwa_clid),
+    plataforma: v.gclid ? "google" : v.fbclid || v.ctwa_clid ? "meta" : null,
     campanha: v.campanha,
     vendidoEm: v.vendido_em ?? v.criado_em,
     statusEnvio:
-      !v.gclid && !v.fbclid
+      !v.gclid && !v.fbclid && !v.ctwa_clid
         ? "sem_rastreio"
         : v.fila_status === "enviado"
           ? "enviado"

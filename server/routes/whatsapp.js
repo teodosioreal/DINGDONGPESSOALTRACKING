@@ -83,7 +83,7 @@ whatsappWebhookRouter.post("/webhook", async (req, res) => {
     return res.status(429).send("muitas requisições");
   }
 
-  const { telefone, texto, deMim, grupo, nome } = normalizarPayloadInbound(req.body);
+  const { telefone, texto, deMim, grupo, nome, anuncio } = normalizarPayloadInbound(req.body);
   if (!telefone || grupo) return res.send("ignorado");
 
   try {
@@ -92,7 +92,7 @@ whatsappWebhookRouter.post("/webhook", async (req, res) => {
     if (deMim) {
       await registrarMensagemEnviada(empresa, { telefone, texto, nome });
     } else {
-      await registrarMensagemRecebida(empresa, { telefone, texto, nome });
+      await registrarMensagemRecebida(empresa, { telefone, texto, nome, anuncio });
     }
   } catch (e) {
     console.error("Falha ao registrar mensagem", e);
