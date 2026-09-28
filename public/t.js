@@ -28,11 +28,35 @@
     // aparecia errado como "veio de anúncio" no painel.
     var JANELA_ATRIBUICAO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
 
+    var ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    // Caracteres zero-width (não aparecem no texto pro cliente nem no
+    // WhatsApp) usados pra esconder o código de rastreio dentro da mensagem
+    // pré-preenchida — antes ficava visível como "(ref: XXXXXXXX)", o que
+    // não fica profissional na conversa. O servidor sabe decodificar de
+    // volta (ver extrairCodigoDoTexto em server/tracking.js).
+    var ZW_MARCADOR = "​";
+    var ZW_ZERO = "‌";
+    var ZW_UM = "‍";
+
     function gerarCodigo() {
-      var alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
       var out = "";
-      for (var i = 0; i < 8; i++) out += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+      for (var i = 0; i < 8; i++) out += ALFABETO_CODIGO[Math.floor(Math.random() * ALFABETO_CODIGO.length)];
       return out;
+    }
+
+    /** Codifica o código em caracteres invisíveis — 6 bits por caractere (cobre os 33 do alfabeto). */
+    function codificarInvisivel(valor) {
+      var bits = "";
+      for (var i = 0; i < valor.length; i++) {
+        var idx = ALFABETO_CODIGO.indexOf(valor[i]);
+        if (idx === -1) return "";
+        var bin = idx.toString(2);
+        while (bin.length < 6) bin = "0" + bin;
+        bits += bin;
+      }
+      var out = "";
+      for (var j = 0; j < bits.length; j++) out += bits[j] === "1" ? ZW_UM : ZW_ZERO;
+      return ZW_MARCADOR + out + ZW_MARCADOR;
     }
 
     /** Lê um valor guardado só se ainda estiver dentro da janela de atribuição — senão trata como se não existisse. */
@@ -118,9 +142,8 @@
         var ehWhatsApp = /wa\.me$/.test(url.hostname) || /whatsapp\.com$/.test(url.hostname);
         if (!ehWhatsApp) return;
         var texto = url.searchParams.get("text") || "";
-        var refTag = "(ref: " + codigo + ")";
-        if (texto.indexOf("(ref:") === -1) {
-          url.searchParams.set("text", (texto ? texto + " " : "") + refTag);
+        if (texto.indexOf(ZW_MARCADOR) === -1) {
+          url.searchParams.set("text", texto + codificarInvisivel(codigo));
           a.href = url.toString();
         }
         a.setAttribute("data-dingdong-marcado", "1");

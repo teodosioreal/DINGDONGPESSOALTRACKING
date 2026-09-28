@@ -69,8 +69,40 @@ export function buscarCliquePorCodigo(codigo) {
   return db.prepare("SELECT * FROM clicks WHERE codigo = ?").get(codigo) ?? null;
 }
 
-/** Extrai o código de rastreio "(ref: XXXXXXXX)" de dentro do texto da mensagem. */
+// Precisa bater exatamente com o alfabeto e os caracteres zero-width do t.js
+// (ver ALFABETO_CODIGO/ZW_* em public/t.js) — é o mesmo código, só que o
+// cliente escreve invisível e aqui a gente lê de volta.
+const ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const ZW_MARCADOR = "​";
+const ZW_ZERO = "‌";
+const ZW_UM = "‍";
+
+/**
+ * Extrai o código de rastreio do texto da mensagem. O código vem escondido
+ * em caracteres invisíveis (zero-width) — o cliente não vê nada de
+ * diferente no texto que manda. O formato antigo, visível,
+ * "(ref: XXXXXXXX)" continua sendo lido também, só por compatibilidade com
+ * links que já estavam abertos numa aba antes dessa mudança.
+ */
 export function extrairCodigoDoTexto(texto) {
-  const m = /\(ref:\s*([A-Z0-9]{6,10})\)/i.exec(texto ?? "");
+  const t = texto ?? "";
+
+  const partes = t.split(ZW_MARCADOR);
+  if (partes.length >= 3) {
+    const bloco = partes[1];
+    if (bloco.length > 0 && bloco.length % 6 === 0 && [...bloco].every((c) => c === ZW_ZERO || c === ZW_UM)) {
+      let codigo = "";
+      for (let i = 0; i < bloco.length; i += 6) {
+        const seis = bloco.slice(i, i + 6);
+        const bin = [...seis].map((c) => (c === ZW_UM ? "1" : "0")).join("");
+        const idx = parseInt(bin, 2);
+        if (idx >= ALFABETO_CODIGO.length) return null;
+        codigo += ALFABETO_CODIGO[idx];
+      }
+      return codigo;
+    }
+  }
+
+  const m = /\(ref:\s*([A-Z0-9]{6,10})\)/i.exec(t);
   return m ? m[1].toUpperCase() : null;
 }
