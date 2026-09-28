@@ -73,12 +73,13 @@ export default function RegrasVenda() {
         "Pagamento confirmado, obrigado!" ou "Recebemos seu PIX" — não o que o cliente escreve. Isso vale tanto pra
         mensagem mandada pelo painel quanto direto do celular conectado. Quando bater com uma dessas frases, a
         conversa é marcada como venda. Se conseguirmos identificar um valor em reais na própria mensagem (ex: "R$
-        150" ou "150 reais") e a opção abaixo estiver desligada, a conversão já é enviada pro Google Ads
-        automaticamente — senão, fica esperando você confirmar em <strong>Conversas</strong>.
+        150" ou "150 reais") e a opção abaixo estiver desligada, a conversão já é enviada automaticamente pra
+        plataforma de origem do lead (Google Ads ou Meta Ads) — senão, fica esperando você confirmar em{" "}
+        <strong>Conversas</strong>.
       </p>
       <p className="text-sm text-slate-600 dark:text-slate-400">
-        Quando o sistema detecta a frase — e de novo quando a venda é enviada pro Google Ads — toca um som de caixa
-        registradora bem chamativo, e o sininho no canto superior direito acende com a notificação.
+        Quando o sistema detecta a frase — e de novo quando a venda é enviada — toca um som de caixa registradora
+        bem chamativo, e o sininho no canto superior direito acende com a notificação.
       </p>
 
       {erro && (
@@ -139,7 +140,7 @@ export default function RegrasVenda() {
               onChange={(e) => setConfirmarAntesDeEnviar(e.target.checked)}
               className="size-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800"
             />
-            Pedir minha confirmação antes de enviar a conversão pro Google Ads (recomendado)
+            Pedir minha confirmação antes de enviar a conversão (recomendado)
           </label>
 
           <div className="flex items-center gap-3">

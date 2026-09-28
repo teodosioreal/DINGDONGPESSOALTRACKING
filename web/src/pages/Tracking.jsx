@@ -196,8 +196,8 @@ export default function Tracking() {
       <p className="text-sm text-slate-600 dark:text-slate-400">
         Cole este script no{" "}
         <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">&lt;head&gt;</code> do seu site, antes de{" "}
-        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">&lt;/head&gt;</code>. Ele captura o gclid do
-        clique de anúncio e marca automaticamente os links de WhatsApp da página.
+        <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">&lt;/head&gt;</code>. Ele captura o gclid
+        (Google) ou fbclid (Meta) do clique de anúncio e marca automaticamente os links de WhatsApp da página.
       </p>
 
       {!script ? (

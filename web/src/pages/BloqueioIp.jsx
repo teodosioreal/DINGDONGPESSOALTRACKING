@@ -119,9 +119,10 @@ export default function BloqueioIp() {
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Todo visitante que passa pelo script de rastreio aparece aqui com o IP, se veio de um anúncio e quanto
             tempo ficou no site. Bloquear um IP é pra clique suspeito (ex: concorrente clicando repetido no seu
-            anúncio) — o IP é excluído das campanhas do Google Ads, pra parar de gastar seu orçamento com ele.
-            Isso é <strong>independente</strong> do envio de conversão de venda: uma venda confirmada sempre é
-            enviada normalmente pro Google Ads, IP bloqueado ou não — são dois mecanismos que não se misturam.
+            anúncio) — o IP é excluído das campanhas do Google Ads, pra parar de gastar seu orçamento com ele
+            (o Meta Ads não tem esse recurso de exclusão por IP). Isso é <strong>independente</strong> do envio de
+            conversão de venda: uma venda confirmada sempre é enviada normalmente pra plataforma de origem, IP
+            bloqueado ou não — são dois mecanismos que não se misturam.
           </p>
         </div>
         <PeriodoSelect valor={periodo} onChange={setPeriodo} />

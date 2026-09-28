@@ -64,7 +64,7 @@ export default function Dashboard() {
   }
 
   async function cancelar(id) {
-    const confirmou = window.confirm("Cancelar o envio dessa conversão? Ela não vai mais ser mandada pro Google Ads.");
+    const confirmou = window.confirm("Cancelar o envio dessa conversão? Ela não vai mais ser mandada pra plataforma de anúncio.");
     if (!confirmou) return;
     setProcessando(id);
     setErroFila("");
@@ -126,8 +126,8 @@ export default function Dashboard() {
       <div>
         <h2 className="mb-3 text-lg font-medium">Vendas para envio</h2>
         <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-          As conversões são enviadas pro Google Ads automaticamente às 08h e às 20h. Enquanto isso, ficam aqui na
-          fila — você pode mandar antes ou cancelar.
+          As conversões são enviadas automaticamente às 08h e às 20h, pra plataforma de origem de cada lead (Google
+          Ads ou Meta Ads). Enquanto isso, ficam aqui na fila — você pode mandar antes ou cancelar.
         </p>
         {erroFila && (
           <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">

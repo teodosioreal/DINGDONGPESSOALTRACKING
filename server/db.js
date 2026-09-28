@@ -308,11 +308,13 @@ export function listarEmpresas() {
               (g.refresh_token IS NOT NULL AND EXISTS(
                 SELECT 1 FROM google_contas_selecionadas gc WHERE gc.empresa_id = e.id
               )) AS googleConectado,
+              (m.pixel_id IS NOT NULL AND m.access_token IS NOT NULL) AS metaConectado,
               (w.session_id IS NOT NULL AND w.api_key IS NOT NULL) AS whatsappConfigurado,
               (e.palavras_chave IS NOT NULL AND TRIM(e.palavras_chave) != '') AS regrasConfiguradas,
               EXISTS(SELECT 1 FROM clicks c WHERE c.empresa_id = e.id) AS pixelInstalado
        FROM empresas e
        LEFT JOIN google_conexoes g ON g.empresa_id = e.id
+       LEFT JOIN meta_conexoes m ON m.empresa_id = e.id
        LEFT JOIN whatsapp_conexoes w ON w.empresa_id = e.id
        ORDER BY e.nome COLLATE NOCASE`,
     )
@@ -517,6 +519,3 @@ export function setConfig(chave, valor) {
   ).run(chave, valor);
 }
 
-export function apagarConfig(chave) {
-  db.prepare("DELETE FROM config WHERE chave = ?").run(chave);
-}

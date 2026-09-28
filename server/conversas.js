@@ -274,13 +274,19 @@ export function eventosRecentes(empresaId, desde) {
 
   const enviadas = db
     .prepare(
-      `SELECT nome, telefone, valor, atualizado_em AS quando
+      `SELECT nome, telefone, valor, gclid, atualizado_em AS quando
        FROM conversas
        WHERE empresa_id = ? AND fila_status = 'enviado' AND conversao_enviada = 1 AND atualizado_em >= ?
        ORDER BY atualizado_em ASC LIMIT 30`,
     )
     .all(empresaId, desde)
-    .map((r) => ({ tipo: "venda_enviada", quando: r.quando, nome: r.nome || r.telefone, valor: r.valor }));
+    .map((r) => ({
+      tipo: "venda_enviada",
+      quando: r.quando,
+      nome: r.nome || r.telefone,
+      valor: r.valor,
+      plataforma: r.gclid ? "google" : "meta",
+    }));
 
   const eventos = [...provaveis, ...enviadas].sort((a, b) => (a.quando < b.quando ? -1 : 1));
   return { eventos, agora };

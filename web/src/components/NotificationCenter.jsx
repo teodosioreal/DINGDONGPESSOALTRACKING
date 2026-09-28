@@ -3,11 +3,15 @@ import { api } from "../lib/api.js";
 import { tocarSomDeCaixaRegistradora } from "../lib/sons.js";
 
 const ICONE = { venda_provavel: "🔔", venda_enviada: "💰" };
+const NOME_PLATAFORMA = { google: "Google Ads", meta: "Meta Ads" };
 const FORMATADOR_VALOR = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function titulo(evento) {
   const valor = evento.valor ? ` — ${FORMATADOR_VALOR.format(Number(evento.valor))}` : "";
-  if (evento.tipo === "venda_enviada") return `Venda enviada ao Google Ads: ${evento.nome}${valor}`;
+  if (evento.tipo === "venda_enviada") {
+    const plataforma = NOME_PLATAFORMA[evento.plataforma] ?? "plataforma de anúncio";
+    return `Venda enviada ao ${plataforma}: ${evento.nome}${valor}`;
+  }
   return `Palavra-chave detectada: ${evento.nome}${valor}`;
 }
 

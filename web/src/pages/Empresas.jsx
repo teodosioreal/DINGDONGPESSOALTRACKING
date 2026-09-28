@@ -56,7 +56,7 @@ export default function Empresas() {
     <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Empresas</h1>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Cada empresa tem sua própria conexão do Google Ads e do WhatsApp.
+        Cada empresa tem sua própria conexão do Google Ads, Meta Ads e WhatsApp.
       </p>
 
       {erro && (
@@ -98,6 +98,7 @@ export default function Empresas() {
               <p className="font-medium">{emp.nome}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <Badge ok={emp.googleConectado} rotuloOk="Google Ads conectado" rotuloPendente="Google Ads pendente" />
+                <Badge ok={emp.metaConectado} rotuloOk="Meta Ads conectado" rotuloPendente="Meta Ads pendente" />
                 <Badge ok={emp.whatsappConfigurado} rotuloOk="WhatsApp configurado" rotuloPendente="WhatsApp pendente" />
                 <Badge ok={emp.regrasConfiguradas} rotuloOk="Regras de venda ok" rotuloPendente="Sem regras de venda" />
                 <Badge ok={emp.pixelInstalado} rotuloOk="Pixel instalado" rotuloPendente="Pixel não instalado" />

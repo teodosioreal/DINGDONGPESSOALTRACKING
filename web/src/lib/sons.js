@@ -29,7 +29,7 @@ function tocarNota(ctx, { freq, inicio, duracao, tipo = "sine", volume = 0.25 })
 
 /**
  * Som de "caixa registradora" — bem chamativo, usado tanto pra venda provável
- * detectada quanto pra venda enviada ao Google Ads. Dois cliques metálicos
+ * detectada quanto pra venda enviada à plataforma de anúncio. Dois cliques metálicos
  * (a gaveta abrindo) seguidos de um "ching!" brilhante e alto.
  */
 export function tocarSomDeCaixaRegistradora() {
