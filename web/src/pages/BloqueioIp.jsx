@@ -279,15 +279,23 @@ export default function BloqueioIp() {
                 <tr key={v.ip} className={v.bloqueado ? "bg-red-50/40 dark:bg-red-950/20" : ""}>
                   <td className="px-4 py-3 font-mono text-xs">{v.ip}</td>
                   <td className="px-4 py-3">
-                    {v.veioDeAnuncio ? (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950/40 dark:text-green-400">
-                        Veio de anúncio
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                        Direto/outro
-                      </span>
-                    )}
+                    <div className="flex flex-wrap gap-1">
+                      {v.veioDeGoogle && (
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                          Google Ads
+                        </span>
+                      )}
+                      {v.veioDeMeta && (
+                        <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                          Meta Ads
+                        </span>
+                      )}
+                      {!v.veioDeAnuncio && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          Direto/outro
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">{v.visitas}</td>
                   <td className="px-4 py-3">{formatarDuracao(v.duracao_segundos)}</td>

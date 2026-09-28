@@ -299,13 +299,24 @@ function ChecklistSetup({ empresaId, checklist }) {
           <li key={item.label} className="text-sm">
             <Link
               to={item.link}
-              className={
+              className={`flex items-center gap-2 ${
                 item.ok
                   ? "text-slate-500 line-through dark:text-slate-500"
                   : "font-medium text-amber-900 hover:underline dark:text-amber-300"
-              }
+              }`}
             >
-              {item.ok ? "✅" : "⬜"} {item.label}
+              {item.ok ? (
+                <svg viewBox="0 0 20 20" fill="currentColor" className="size-4 shrink-0 text-green-600 dark:text-green-500">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.7-9.3a1 1 0 0 0-1.4-1.4L9 10.6 7.7 9.3a1 1 0 0 0-1.4 1.4l2 2a1 1 0 0 0 1.4 0l4-4Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              ) : (
+                <span className="size-4 shrink-0 rounded-full border-2 border-amber-400 dark:border-amber-600" />
+              )}
+              {item.label}
             </Link>
           </li>
         ))}

@@ -30,6 +30,7 @@ export default function Layout({ aoSair }) {
   const [empresa, setEmpresa] = useState(null);
   const [escuro, setEscuro] = useState(temaSalvo);
   const [naoLidas, setNaoLidas] = useState(0);
+  const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", escuro);
@@ -95,24 +96,58 @@ export default function Layout({ aoSair }) {
 
   return (
     <div className="flex min-h-screen">
+      {!menuAberto && (
+        <button
+          onClick={() => setMenuAberto(true)}
+          title="Abrir menu"
+          className="fixed left-4 top-4 z-50 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 md:hidden"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
+      {menuAberto && (
+        <div
+          onClick={() => setMenuAberto(false)}
+          className="fixed inset-0 z-30 bg-black/30 md:hidden"
+        />
+      )}
       <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
         <NotificationCenter empresaId={empresaId} />
         <button
           onClick={() => setEscuro((v) => !v)}
           title={escuro ? "Mudar para o modo claro" : "Mudar para o modo escuro"}
-          className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
         >
-          {escuro ? "☀️ Claro" : "🌙 Escuro"}
+          {escuro ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-4">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M6.4 17.6 5 19m13.4 0-1.4-1.4M6.4 6.4 5 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+            </svg>
+          )}
         </button>
       </div>
-      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out dark:border-slate-800 dark:bg-slate-900 md:static md:translate-x-0 ${
+          menuAberto ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div className="px-5 py-6">
           <span className="text-lg font-semibold tracking-tight">DingDong</span>
         </div>
-        <nav className="flex-1 space-y-1 px-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3">
           <NavLink
             to="/app/empresas"
             end
+            onClick={() => setMenuAberto(false)}
             className={({ isActive }) =>
               `block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
@@ -134,6 +169,7 @@ export default function Layout({ aoSair }) {
                   key={item.to}
                   to={item.to}
                   end={item.fim}
+                  onClick={() => setMenuAberto(false)}
                   className={({ isActive }) =>
                     `flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                       isActive
@@ -156,6 +192,7 @@ export default function Layout({ aoSair }) {
         <div className="space-y-2 p-3">
           <NavLink
             to="/app/conta"
+            onClick={() => setMenuAberto(false)}
             className={({ isActive }) =>
               `block rounded-md px-3 py-2 text-left text-sm font-medium ${
                 isActive
@@ -175,7 +212,7 @@ export default function Layout({ aoSair }) {
           <p className="px-3 text-xs text-slate-400 dark:text-slate-500">Última atualização: {formatarBuild()}</p>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="w-full flex-1 overflow-y-auto p-4 pt-16 md:p-8">
         <Outlet />
       </main>
     </div>

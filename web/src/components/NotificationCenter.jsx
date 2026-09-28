@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { tocarSomDeCaixaRegistradora } from "../lib/sons.js";
 
-const ICONE = { venda_provavel: "🔔", venda_enviada: "💰" };
+const COR_PONTO = { venda_provavel: "bg-amber-400", venda_enviada: "bg-green-500" };
 const NOME_PLATAFORMA = { google: "Google Ads", meta: "Meta Ads" };
 const FORMATADOR_VALOR = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -94,13 +94,19 @@ export default function NotificationCenter({ empresaId }) {
       <button
         onClick={alternar}
         title="Notificações"
-        className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-sm shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${
+        className={`relative flex h-8 w-8 items-center justify-center rounded-full border text-slate-500 shadow-sm hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-700 ${
           chamativo
             ? "animate-bounce border-amber-400 bg-amber-100 dark:border-amber-500 dark:bg-amber-900/60"
             : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
         }`}
       >
-        🔔
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-4">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"
+          />
+        </svg>
         {naoLidas > 0 && (
           <span className="absolute -right-1 -top-1 flex h-4 min-w-4 animate-pulse items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
             {naoLidas > 9 ? "9+" : naoLidas}
@@ -121,8 +127,9 @@ export default function NotificationCenter({ empresaId }) {
                 key={n.id}
                 className="border-b border-slate-50 px-3 py-2 text-sm last:border-0 dark:border-slate-800/60"
               >
-                <p className="text-slate-700 dark:text-slate-200">
-                  {ICONE[n.tipo]} {titulo(n)}
+                <p className="flex items-start gap-2 text-slate-700 dark:text-slate-200">
+                  <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${COR_PONTO[n.tipo] ?? "bg-slate-400"}`} />
+                  {titulo(n)}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{tempoRelativo(n.quando)}</p>
               </div>

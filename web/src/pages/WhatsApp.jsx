@@ -84,11 +84,16 @@ export default function WhatsApp() {
   async function removerCredenciais() {
     const confirmou = window.confirm("Remover esta sessão? Você vai precisar criar uma nova pra reconectar.");
     if (!confirmou) return;
-    await api.whatsappRemoverCredenciais(empresaId);
-    setQr(null);
-    setCodigo(null);
-    await carregarCredenciais();
-    await carregarStatus();
+    setErro("");
+    try {
+      await api.whatsappRemoverCredenciais(empresaId);
+      setQr(null);
+      setCodigo(null);
+      await carregarCredenciais();
+      await carregarStatus();
+    } catch (e) {
+      setErro(e.message);
+    }
   }
 
   async function gerarCodigo() {
@@ -103,8 +108,13 @@ export default function WhatsApp() {
   }
 
   async function desconectar() {
-    await api.whatsappDesconectar(empresaId);
-    carregarStatus();
+    setErro("");
+    try {
+      await api.whatsappDesconectar(empresaId);
+      await carregarStatus();
+    } catch (e) {
+      setErro(e.message);
+    }
   }
 
   const configurado = credenciais?.temApiKey;

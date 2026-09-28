@@ -14,6 +14,8 @@ ipBloqueioRouter.get("/", (req, res) => {
     return {
       ...v,
       veioDeAnuncio: Boolean(v.veioDeAnuncio),
+      veioDeGoogle: Boolean(v.veioDeGoogle),
+      veioDeMeta: Boolean(v.veioDeMeta),
       bloqueado: Boolean(b),
       motivoBloqueio: b?.motivo ?? null,
       googleAplicado: Boolean(b?.google_criterios),

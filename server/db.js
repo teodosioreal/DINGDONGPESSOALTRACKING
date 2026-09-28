@@ -434,7 +434,9 @@ export function listarVisitasPorIp(empresaId) {
               COUNT(*) AS visitas,
               MAX(criado_em) AS ultima_visita,
               MAX(duracao_segundos) AS duracao_segundos,
-              MAX(CASE WHEN origem != 'sem_rastreio' THEN 1 ELSE 0 END) AS veioDeAnuncio
+              MAX(CASE WHEN origem != 'sem_rastreio' THEN 1 ELSE 0 END) AS veioDeAnuncio,
+              MAX(CASE WHEN origem = 'google' THEN 1 ELSE 0 END) AS veioDeGoogle,
+              MAX(CASE WHEN origem = 'meta' THEN 1 ELSE 0 END) AS veioDeMeta
        FROM clicks
        WHERE empresa_id = ? AND ip IS NOT NULL AND ip != ''
        GROUP BY ip

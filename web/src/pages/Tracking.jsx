@@ -301,13 +301,13 @@ export default function Tracking() {
         )}
         {status === "sucesso" && (
           <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-400">
-            ✅ Recebemos o clique de teste! O rastreio está funcionando.
+            Recebemos o clique de teste! O rastreio está funcionando.
           </p>
         )}
         {status === "falha" && (
           <div className="space-y-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
             <p>
-              ❌ Não recebemos nada em 30 segundos. Confira se o script está mesmo colado no{" "}
+              Não recebemos nada em 30 segundos. Confira se o script está mesmo colado no{" "}
               <code>&lt;head&gt;</code> do site (dentro do <code>&lt;head&gt;</code>, antes de{" "}
               <code>&lt;/head&gt;</code>) e se o endereço digitado está correto.
             </p>
