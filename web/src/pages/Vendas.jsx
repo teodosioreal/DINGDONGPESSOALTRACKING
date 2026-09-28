@@ -47,7 +47,7 @@ function csvCampo(valor) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function SecaoPlataforma({ titulo, linhas, moeda }) {
+function SecaoPlataforma({ titulo, linhas, moeda, onEnviarAgora, processando }) {
   return (
     <div>
       <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -67,6 +67,7 @@ function SecaoPlataforma({ titulo, linhas, moeda }) {
                 <th className="px-4 py-2">Campanha</th>
                 <th className="px-4 py-2">Data da venda</th>
                 <th className="px-4 py-2">Envio</th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -80,6 +81,17 @@ function SecaoPlataforma({ titulo, linhas, moeda }) {
                     <td className="px-4 py-2 text-slate-500 dark:text-slate-400">{formatarData(v.vendidoEm)}</td>
                     <td className="px-4 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.cor}`}>{st.texto}</span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {v.statusEnvio === "pendente" && (
+                        <button
+                          onClick={() => onEnviarAgora(v.id)}
+                          disabled={processando === v.id}
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                        >
+                          {processando === v.id ? "Enviando…" : "Enviar agora"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -129,23 +141,39 @@ export default function Vendas() {
   const [vendas, setVendas] = useState(null);
   const [moeda, setMoeda] = useState("BRL");
   const [erro, setErro] = useState("");
+  const [erroEnvio, setErroEnvio] = useState("");
   const [mostrarSemRastreio, setMostrarSemRastreio] = useState(false);
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState(null);
+  const [processando, setProcessando] = useState("");
+
+  function carregarVendas() {
+    return api.vendas(empresaId).then((r) => setVendas(r.vendas));
+  }
 
   useEffect(() => {
     setVendas(null);
     setErro("");
     setResultadoTeste(null);
-    api
-      .vendas(empresaId)
-      .then((r) => setVendas(r.vendas))
-      .catch((e) => setErro(e.message));
+    carregarVendas().catch((e) => setErro(e.message));
     api
       .empresa(empresaId)
       .then((r) => setMoeda(r.empresa.moeda || "BRL"))
       .catch(() => {});
   }, [empresaId]);
+
+  async function enviarAgora(id) {
+    setProcessando(id);
+    setErroEnvio("");
+    try {
+      await api.enviarVendaAgora(empresaId, id);
+      await carregarVendas();
+    } catch (e) {
+      setErroEnvio(e.message);
+    } finally {
+      setProcessando("");
+    }
+  }
 
   async function testarConversao() {
     setTestando(true);
@@ -190,6 +218,12 @@ export default function Vendas() {
           Meta) — é isso que vira conversão automática na plataforma de origem.
         </p>
       </div>
+
+      {erroEnvio && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+          {erroEnvio}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <button
@@ -239,8 +273,20 @@ export default function Vendas() {
         do Meta Ads não têm CSV — vão só pelo envio automático (Conversions API).
       </p>
 
-      <SecaoPlataforma titulo="Google Ads" linhas={vendasGoogle} moeda={moeda} />
-      <SecaoPlataforma titulo="Meta Ads" linhas={vendasMeta} moeda={moeda} />
+      <SecaoPlataforma
+        titulo="Google Ads"
+        linhas={vendasGoogle}
+        moeda={moeda}
+        onEnviarAgora={enviarAgora}
+        processando={processando}
+      />
+      <SecaoPlataforma
+        titulo="Meta Ads"
+        linhas={vendasMeta}
+        moeda={moeda}
+        onEnviarAgora={enviarAgora}
+        processando={processando}
+      />
 
       <div>
         <button
