@@ -12,6 +12,7 @@ import {
   cancelarEnvio,
   eventosRecentes,
   apagarConversa,
+  apagarTodasConversas,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
@@ -46,7 +47,7 @@ conversasRouter.post("/:id/mensagens", async (req, res) => {
   if (!texto) return res.status(400).json({ erro: "Mensagem vazia." });
   const r = await enviarMensagem(req.empresaId, conversa.telefone, texto);
   if (!r.ok) return res.status(400).json({ erro: r.erro });
-  await registrarMensagemEnviada(req.empresa, { telefone: conversa.telefone, texto, nome: conversa.nome });
+  await registrarMensagemEnviada(req.empresa, { telefone: conversa.telefone, texto });
   res.json({ ok: true });
 });
 
@@ -76,6 +77,16 @@ conversasRouter.delete("/:id", (req, res) => {
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   apagarConversa(req.empresaId, conversa.id);
   res.json({ ok: true });
+});
+
+/**
+ * Apaga TODAS as conversas da empresa de uma vez (só aqui dentro do
+ * DingDong — não mexe no WhatsApp de verdade). Preserva as que já viraram
+ * venda, pra não perder o histórico da aba Vendas.
+ */
+conversasRouter.delete("/", (req, res) => {
+  const r = apagarTodasConversas(req.empresaId);
+  res.json({ ok: true, apagadas: r.apagadas });
 });
 
 export const dashboardRouter = Router({ mergeParams: true });

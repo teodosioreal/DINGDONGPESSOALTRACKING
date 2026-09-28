@@ -128,6 +128,18 @@ export function apagarConversa(empresaId, id) {
   db.prepare("DELETE FROM conversas WHERE id = ? AND empresa_id = ?").run(id, empresaId);
 }
 
+/**
+ * Apaga TODAS as conversas da empresa de uma vez — só o que está guardado
+ * no DingDong (a conversa continua existindo no WhatsApp normalmente).
+ * NUNCA apaga as que já viraram venda (status = 'vendido'): é dali que a
+ * aba Vendas e o CSV do Google Ads puxam o histórico — perder isso seria
+ * perder faturamento registrado, não só "limpar a lista".
+ */
+export function apagarTodasConversas(empresaId) {
+  const r = db.prepare("DELETE FROM conversas WHERE empresa_id = ? AND status != 'vendido'").run(empresaId);
+  return { apagadas: r.changes };
+}
+
 export function listarMensagens(conversaId) {
   return db.prepare("SELECT * FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC").all(conversaId);
 }

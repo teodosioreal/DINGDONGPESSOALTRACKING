@@ -109,6 +109,7 @@ export const api = {
   descartarVenda: (empresaId, id) =>
     chamar(`/api/empresas/${empresaId}/conversas/${id}/descartar-venda`, { method: "POST" }),
   apagarConversa: (empresaId, id) => chamar(`/api/empresas/${empresaId}/conversas/${id}`, { method: "DELETE" }),
+  apagarTodasConversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`, { method: "DELETE" }),
 
   // ---- Bloqueio de IP ----
   visitasIp: (empresaId) => chamar(`/api/empresas/${empresaId}/ip-bloqueio`),

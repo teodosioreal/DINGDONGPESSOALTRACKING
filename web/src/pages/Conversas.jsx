@@ -29,6 +29,7 @@ export default function Conversas() {
   const [texto, setTexto] = useState("");
   const [valorVenda, setValorVenda] = useState("");
   const [aviso, setAviso] = useState("");
+  const [limpandoTudo, setLimpandoTudo] = useState(false);
 
   useEffect(() => {
     setConversas([]);
@@ -94,9 +95,44 @@ export default function Conversas() {
     carregarLista();
   }
 
+  async function limparTudo() {
+    if (
+      !confirm(
+        "Apagar TODAS as conversas dessa empresa aqui no DingDong? As vendas já confirmadas são mantidas. Isso não mexe no WhatsApp de verdade, só no que o DingDong guardou — não pode ser desfeito.",
+      )
+    ) {
+      return;
+    }
+    setLimpandoTudo(true);
+    try {
+      await api.apagarTodasConversas(empresaId);
+      setSelecionada(null);
+      setMensagens([]);
+      await carregarLista();
+    } finally {
+      setLimpandoTudo(false);
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-4">
-      <div className="w-80 shrink-0 overflow-y-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            {conversas.length} conversa{conversas.length === 1 ? "" : "s"}
+          </span>
+          {conversas.length > 0 && (
+            <button
+              onClick={limparTudo}
+              disabled={limpandoTudo}
+              title="Apaga todas as conversas aqui no app (mantém as vendas) — não mexe no WhatsApp"
+              className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+            >
+              {limpandoTudo ? "Limpando…" : "Limpar tudo"}
+            </button>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto">
         {conversas.map((c) => (
           <button
             key={c.id}
@@ -125,6 +161,7 @@ export default function Conversas() {
         {conversas.length === 0 && (
           <p className="p-4 text-sm text-slate-500 dark:text-slate-400">Nenhuma conversa ainda.</p>
         )}
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
