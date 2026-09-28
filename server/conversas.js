@@ -3,12 +3,24 @@ import { buscarCliquePorCodigo, extrairCodigoDoTexto } from "./tracking.js";
 import { avaliarMensagem } from "./vendaAutomatica.js";
 import { proximoHorarioEnvio, formatarHorarioBrasilia, enviarVendaDaFila } from "./filaDeEnvio.js";
 
-/** Garante que existe uma conversa para o telefone (dentro da empresa) e devolve a linha. */
+/**
+ * Garante que existe uma conversa para o telefone (dentro da empresa) e
+ * devolve a linha. Se já existir mas ainda não tiver nome (ex: foi criada
+ * antes de saber o nome do cliente) e um nome de verdade chegou agora,
+ * preenche. `nome` só deve vir de mensagem RECEBIDA do cliente — ver
+ * registrarMensagemEnviada() abaixo pra entender por quê.
+ */
 function conversaDoTelefone(empresaId, telefone, nome) {
   const existente = db
     .prepare("SELECT * FROM conversas WHERE empresa_id = ? AND telefone = ?")
     .get(empresaId, telefone);
-  if (existente) return existente;
+  if (existente) {
+    if (nome && !existente.nome) {
+      db.prepare("UPDATE conversas SET nome = ? WHERE id = ?").run(nome, existente.id);
+      return { ...existente, nome };
+    }
+    return existente;
+  }
   const info = db
     .prepare("INSERT INTO conversas (empresa_id, telefone, nome) VALUES (?, ?, ?)")
     .run(empresaId, telefone, nome ?? null);
@@ -67,10 +79,15 @@ function mensagemEnviadaDuplicadaRecente(conversaId, texto) {
  * direto do celular conectado) — a detecção de venda por palavra-chave roda
  * aqui: é a frase que a empresa manda pra confirmar a venda (ex: "pagamento
  * confirmado") que dispara, não o que o cliente escreve.
+ *
+ * NUNCA usa `pushName` pra nomear a conversa aqui: numa mensagem "de mim" o
+ * pushName do webhook é o nome do PRÓPRIO WhatsApp da empresa (o remetente é
+ * a empresa, não o cliente) — usar ele criava leads novos com o nome do
+ * dono da conta em vez do nome do cliente.
  */
-export async function registrarMensagemEnviada(empresa, { telefone, texto, nome }) {
+export async function registrarMensagemEnviada(empresa, { telefone, texto }) {
   const empresaId = empresa.id;
-  let conversa = conversaDoTelefone(empresaId, telefone, nome);
+  let conversa = conversaDoTelefone(empresaId, telefone, null);
 
   if (mensagemEnviadaDuplicadaRecente(conversa.id, texto)) {
     return conversa;
@@ -104,6 +121,11 @@ export function listarConversas(empresaId) {
 
 export function buscarConversa(empresaId, id) {
   return db.prepare("SELECT * FROM conversas WHERE id = ? AND empresa_id = ?").get(id, empresaId) ?? null;
+}
+
+/** Apaga a conversa (e as mensagens dela, em cascata) — ex: lead criado por engano/duplicado. */
+export function apagarConversa(empresaId, id) {
+  db.prepare("DELETE FROM conversas WHERE id = ? AND empresa_id = ?").run(id, empresaId);
 }
 
 export function listarMensagens(conversaId) {

@@ -11,6 +11,7 @@ import {
   enviarVendaAgora,
   cancelarEnvio,
   eventosRecentes,
+  apagarConversa,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
@@ -66,6 +67,14 @@ conversasRouter.post("/:id/descartar-venda", (req, res) => {
   const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   descartarVendaProvavel(conversa.id);
+  res.json({ ok: true });
+});
+
+/** Apaga um lead/conversa (ex: criado por engano, duplicado, teste). */
+conversasRouter.delete("/:id", (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
+  apagarConversa(req.empresaId, conversa.id);
   res.json({ ok: true });
 });
 

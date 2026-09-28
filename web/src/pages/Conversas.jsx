@@ -83,6 +83,17 @@ export default function Conversas() {
     carregarLista();
   }
 
+  async function apagar() {
+    if (!selecionada) return;
+    if (!confirm(`Apagar a conversa com ${selecionada.nome || selecionada.telefone}? Isso não pode ser desfeito.`)) {
+      return;
+    }
+    await api.apagarConversa(empresaId, selecionada.id);
+    setSelecionada(null);
+    setMensagens([]);
+    carregarLista();
+  }
+
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-4">
       <div className="w-80 shrink-0 overflow-y-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -131,28 +142,38 @@ export default function Conversas() {
                   <BadgeOrigem origem={selecionada.origem} />
                 </div>
               </div>
-              {selecionada.status !== "vendido" && (
-                <form onSubmit={marcarVenda} className="flex items-center gap-2">
-                  <input
-                    value={valorVenda}
-                    onChange={(e) => setValorVenda(e.target.value)}
-                    placeholder="Valor da venda"
-                    className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  />
-                  <button type="submit" className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white">
-                    {selecionada.status === "venda_provavel" ? "Confirmar venda" : "Marcar venda"}
-                  </button>
-                  {selecionada.status === "venda_provavel" && (
-                    <button
-                      type="button"
-                      onClick={descartarVendaProvavel}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                    >
-                      Não é venda
+              <div className="flex items-center gap-2">
+                {selecionada.status !== "vendido" && (
+                  <form onSubmit={marcarVenda} className="flex items-center gap-2">
+                    <input
+                      value={valorVenda}
+                      onChange={(e) => setValorVenda(e.target.value)}
+                      placeholder="Valor da venda"
+                      className="w-32 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                    <button type="submit" className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-semibold text-white">
+                      {selecionada.status === "venda_provavel" ? "Confirmar venda" : "Marcar venda"}
                     </button>
-                  )}
-                </form>
-              )}
+                    {selecionada.status === "venda_provavel" && (
+                      <button
+                        type="button"
+                        onClick={descartarVendaProvavel}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                      >
+                        Não é venda
+                      </button>
+                    )}
+                  </form>
+                )}
+                <button
+                  type="button"
+                  onClick={apagar}
+                  title="Apagar conversa"
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                >
+                  Apagar
+                </button>
+              </div>
             </div>
 
             {selecionada.status === "venda_provavel" && (

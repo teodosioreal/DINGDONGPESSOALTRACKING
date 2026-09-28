@@ -72,6 +72,14 @@ whatsappRouter.post("/desconectar", async (req, res) => {
  */
 export const whatsappWebhookRouter = Router();
 
+// Depois que a sessão do WhatsApp reconecta (caiu e voltou, trocou de
+// aparelho etc.), o Baileys costuma reenviar um lote de mensagens antigas
+// (sincronização de histórico) pelo mesmo webhook messages.upsert — sem
+// esse filtro, cada uma delas vira um "lead novo" (origem errada, sem
+// rastreio nenhum). Mensagem com mais de 5 minutos de atraso em relação ao
+// horário de agora é tratada como histórico, não evento ao vivo.
+const ATRASO_MAXIMO_SEGUNDOS = 5 * 60;
+
 whatsappWebhookRouter.post("/webhook", async (req, res) => {
   const empresa = empresaDoWebhook(req);
   if (!empresa) return res.status(401).send("empresa ou chave inválida");
@@ -83,14 +91,19 @@ whatsappWebhookRouter.post("/webhook", async (req, res) => {
     return res.status(429).send("muitas requisições");
   }
 
-  const { telefone, texto, deMim, grupo, nome, anuncio } = normalizarPayloadInbound(req.body);
+  const { telefone, texto, deMim, grupo, nome, anuncio, timestamp } = normalizarPayloadInbound(req.body);
   if (!telefone || grupo) return res.send("ignorado");
+  if (timestamp && Date.now() / 1000 - timestamp > ATRASO_MAXIMO_SEGUNDOS) {
+    return res.send("ignorado (mensagem antiga, provável sincronização de histórico)");
+  }
 
   try {
     // Mensagens "de mim" (mandadas pela empresa, pelo painel ou direto do
     // celular conectado) são onde roda a detecção de venda por palavra-chave.
+    // Não passa `nome` aqui: numa mensagem "de mim" o pushName é o da PRÓPRIA
+    // empresa no WhatsApp, não o do cliente (ver registrarMensagemEnviada).
     if (deMim) {
-      await registrarMensagemEnviada(empresa, { telefone, texto, nome });
+      await registrarMensagemEnviada(empresa, { telefone, texto });
     } else {
       await registrarMensagemRecebida(empresa, { telefone, texto, nome, anuncio });
     }

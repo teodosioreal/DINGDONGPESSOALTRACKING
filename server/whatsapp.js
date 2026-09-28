@@ -229,10 +229,17 @@ function extrairAnuncio(msg) {
  * eventos (connection.update, chats.upsert etc.) podem chegar na mesma URL
  * quando o webhook não está filtrado por evento — são ignorados aqui.
  */
+/** `messageTimestamp` do Baileys vem em segundos desde epoch — mas normaliza caso algum dia venha em milissegundos. */
+function timestampEmSegundos(bruto) {
+  const n = Number(bruto);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n > 1e12 ? Math.floor(n / 1000) : n;
+}
+
 export function normalizarPayloadInbound(bruto) {
   const cru = bruto ?? {};
   if (cru.event && cru.event !== "messages.upsert") {
-    return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined, anuncio: null };
+    return { telefone: "", texto: "", deMim: false, grupo: false, nome: undefined, anuncio: null, timestamp: 0 };
   }
   const dado = typeof cru.data === "object" && cru.data ? cru.data : cru;
   const remoteJid = String(dado.key?.remoteJid ?? "");
@@ -245,5 +252,6 @@ export function normalizarPayloadInbound(bruto) {
   const deMim = dado.key?.fromMe === true;
   const nome = dado.pushName ?? undefined;
   const anuncio = extrairAnuncio(msg);
-  return { telefone, texto, deMim, grupo, nome, anuncio };
+  const timestamp = timestampEmSegundos(dado.messageTimestamp);
+  return { telefone, texto, deMim, grupo, nome, anuncio, timestamp };
 }
