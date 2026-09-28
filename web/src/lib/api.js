@@ -95,7 +95,12 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/whatsapp/criar-sessao-automatica`, { method: "POST" }),
 
   // ---- Conversas ----
-  conversas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas`),
+  conversas: (empresaId, arquivadas) =>
+    chamar(`/api/empresas/${empresaId}/conversas${arquivadas ? "?arquivadas=1" : ""}`),
+  arquivarConversa: (empresaId, id) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/arquivar`, { method: "POST" }),
+  desarquivarConversa: (empresaId, id) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/desarquivar`, { method: "POST" }),
   conversasNaoLidas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas/nao-lidas`),
   eventosRecentes: (empresaId, desde) =>
     chamar(

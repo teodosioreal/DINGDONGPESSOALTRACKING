@@ -13,6 +13,8 @@ import {
   eventosRecentes,
   apagarConversa,
   apagarTodasConversas,
+  arquivarConversa,
+  desarquivarConversa,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
@@ -21,7 +23,7 @@ import { metricasCampanhasSelecionadas, nomesDeCampanhas } from "../googleAds.js
 export const conversasRouter = Router({ mergeParams: true });
 
 conversasRouter.get("/", (req, res) => {
-  res.json({ conversas: listarConversas(req.empresaId) });
+  res.json({ conversas: listarConversas(req.empresaId, { arquivadas: req.query.arquivadas === "1" }) });
 });
 
 conversasRouter.get("/nao-lidas", (req, res) => {
@@ -68,6 +70,22 @@ conversasRouter.post("/:id/descartar-venda", (req, res) => {
   const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   descartarVendaProvavel(conversa.id);
+  res.json({ ok: true });
+});
+
+/** Arquiva a conversa — some da lista principal, sem apagar nada. */
+conversasRouter.post("/:id/arquivar", (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
+  arquivarConversa(req.empresaId, conversa.id);
+  res.json({ ok: true });
+});
+
+/** Desarquiva — volta pra lista principal. */
+conversasRouter.post("/:id/desarquivar", (req, res) => {
+  const conversa = buscarConversa(req.empresaId, req.params.id);
+  if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
+  desarquivarConversa(req.empresaId, conversa.id);
   res.json({ ok: true });
 });
 

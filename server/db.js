@@ -234,6 +234,7 @@ function migrarColunasNovas() {
   adicionarColuna("conversas", "nao_lida", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("conversas", "vendido_em", "TEXT");
   adicionarColuna("conversas", "ctwa_clid", "TEXT");
+  adicionarColuna("conversas", "arquivada", "INTEGER NOT NULL DEFAULT 0");
   adicionarColuna("empresas", "bloqueio_auto_ativo", "INTEGER NOT NULL DEFAULT 1");
   adicionarColuna("empresas", "bloqueio_auto_cliques", "INTEGER NOT NULL DEFAULT 5");
   adicionarColuna("empresas", "bloqueio_auto_minutos", "INTEGER NOT NULL DEFAULT 5");
@@ -516,8 +517,11 @@ export function marcarConversaLida(conversaId) {
   db.prepare("UPDATE conversas SET nao_lida = 0 WHERE id = ?").run(conversaId);
 }
 
+/** Não conta conversa arquivada — arquivar é "já resolvi isso", não deveria continuar cutucando o badge de não lida. */
 export function contarConversasNaoLidas(empresaId) {
-  return db.prepare("SELECT COUNT(*) AS n FROM conversas WHERE empresa_id = ? AND nao_lida = 1").get(empresaId).n;
+  return db
+    .prepare("SELECT COUNT(*) AS n FROM conversas WHERE empresa_id = ? AND nao_lida = 1 AND arquivada = 0")
+    .get(empresaId).n;
 }
 
 /** Resumo de quanto do setup da empresa já está pronto — pra tela Painel. */

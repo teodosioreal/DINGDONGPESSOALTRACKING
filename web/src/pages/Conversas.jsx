@@ -30,6 +30,7 @@ export default function Conversas() {
   const [valorVenda, setValorVenda] = useState("");
   const [aviso, setAviso] = useState("");
   const [limpandoTudo, setLimpandoTudo] = useState(false);
+  const [verArquivadas, setVerArquivadas] = useState(false);
 
   useEffect(() => {
     setConversas([]);
@@ -37,10 +38,10 @@ export default function Conversas() {
     carregarLista();
     const t = setInterval(carregarLista, 15000);
     return () => clearInterval(t);
-  }, [empresaId]);
+  }, [empresaId, verArquivadas]);
 
   async function carregarLista() {
-    const r = await api.conversas(empresaId);
+    const r = await api.conversas(empresaId, verArquivadas);
     setConversas(r.conversas);
   }
 
@@ -95,6 +96,22 @@ export default function Conversas() {
     carregarLista();
   }
 
+  async function arquivar() {
+    if (!selecionada) return;
+    await api.arquivarConversa(empresaId, selecionada.id);
+    setSelecionada(null);
+    setMensagens([]);
+    carregarLista();
+  }
+
+  async function desarquivar() {
+    if (!selecionada) return;
+    await api.desarquivarConversa(empresaId, selecionada.id);
+    setSelecionada(null);
+    setMensagens([]);
+    carregarLista();
+  }
+
   async function limparTudo() {
     if (
       !confirm(
@@ -117,11 +134,33 @@ export default function Conversas() {
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-4">
       <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex border-b border-slate-100 dark:border-slate-800">
+          <button
+            onClick={() => setVerArquivadas(false)}
+            className={`flex-1 px-3 py-2 text-xs font-medium ${
+              !verArquivadas
+                ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                : "text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            }`}
+          >
+            Ativas
+          </button>
+          <button
+            onClick={() => setVerArquivadas(true)}
+            className={`flex-1 px-3 py-2 text-xs font-medium ${
+              verArquivadas
+                ? "border-b-2 border-slate-900 text-slate-900 dark:border-white dark:text-white"
+                : "text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            }`}
+          >
+            Arquivadas
+          </button>
+        </div>
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {conversas.length} conversa{conversas.length === 1 ? "" : "s"}
           </span>
-          {conversas.length > 0 && (
+          {!verArquivadas && conversas.length > 0 && (
             <button
               onClick={limparTudo}
               disabled={limpandoTudo}
@@ -159,7 +198,9 @@ export default function Conversas() {
           </button>
         ))}
         {conversas.length === 0 && (
-          <p className="p-4 text-sm text-slate-500 dark:text-slate-400">Nenhuma conversa ainda.</p>
+          <p className="p-4 text-sm text-slate-500 dark:text-slate-400">
+            {verArquivadas ? "Nenhuma conversa arquivada." : "Nenhuma conversa ainda."}
+          </p>
         )}
         </div>
       </div>
@@ -201,6 +242,25 @@ export default function Conversas() {
                       </button>
                     )}
                   </form>
+                )}
+                {verArquivadas ? (
+                  <button
+                    type="button"
+                    onClick={desarquivar}
+                    title="Volta pra lista principal"
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                  >
+                    Desarquivar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={arquivar}
+                    title="Some da lista principal, sem apagar nada"
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                  >
+                    Arquivar
+                  </button>
                 )}
                 <button
                   type="button"

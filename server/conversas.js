@@ -113,10 +113,13 @@ export async function registrarMensagemEnviada(empresa, { telefone, texto }) {
   return db.prepare("SELECT * FROM conversas WHERE id = ?").get(conversa.id);
 }
 
-export function listarConversas(empresaId) {
+/** Por padrão só traz as ativas (não arquivadas) — passe `arquivadas: true` pra ver a lista de arquivadas em vez disso. */
+export function listarConversas(empresaId, { arquivadas = false } = {}) {
   return db
-    .prepare("SELECT * FROM conversas WHERE empresa_id = ? ORDER BY atualizado_em DESC LIMIT 200")
-    .all(empresaId);
+    .prepare(
+      "SELECT * FROM conversas WHERE empresa_id = ? AND arquivada = ? ORDER BY atualizado_em DESC LIMIT 200",
+    )
+    .all(empresaId, arquivadas ? 1 : 0);
 }
 
 export function buscarConversa(empresaId, id) {
@@ -131,13 +134,24 @@ export function apagarConversa(empresaId, id) {
 /**
  * Apaga TODAS as conversas da empresa de uma vez — só o que está guardado
  * no DingDong (a conversa continua existindo no WhatsApp normalmente).
- * NUNCA apaga as que já viraram venda (status = 'vendido'): é dali que a
- * aba Vendas e o CSV do Google Ads puxam o histórico — perder isso seria
- * perder faturamento registrado, não só "limpar a lista".
+ * NUNCA apaga as que já viraram venda (status = 'vendido') nem as
+ * arquivadas: é dali que a aba Vendas e o CSV do Google Ads puxam o
+ * histórico, e arquivar é justamente pra guardar de lado, não perder.
  */
 export function apagarTodasConversas(empresaId) {
-  const r = db.prepare("DELETE FROM conversas WHERE empresa_id = ? AND status != 'vendido'").run(empresaId);
+  const r = db
+    .prepare("DELETE FROM conversas WHERE empresa_id = ? AND status != 'vendido' AND arquivada = 0")
+    .run(empresaId);
   return { apagadas: r.changes };
+}
+
+/** Arquiva/desarquiva uma conversa — some da lista principal sem apagar nada; some do "Limpar tudo" também. */
+export function arquivarConversa(empresaId, id) {
+  db.prepare("UPDATE conversas SET arquivada = 1 WHERE id = ? AND empresa_id = ?").run(id, empresaId);
+}
+
+export function desarquivarConversa(empresaId, id) {
+  db.prepare("UPDATE conversas SET arquivada = 0 WHERE id = ? AND empresa_id = ?").run(id, empresaId);
 }
 
 export function listarMensagens(conversaId) {
