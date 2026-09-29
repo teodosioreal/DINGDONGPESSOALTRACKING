@@ -208,20 +208,31 @@ export function empresaDoWebhook(req) {
  * capturar (o t.js nunca roda). O WhatsApp embute o contexto do anúncio
  * (`externalAdReply`, incluindo o `ctwaClid`, equivalente ao fbclid pra esse
  * tipo de anúncio) na PRIMEIRA mensagem da conversa — é isso que faz o
- * próprio app do WhatsApp mostrar o preview do anúncio no topo do chat. Só
- * vem em mensagens com contextInfo (extendedTextMessage/imageMessage/
- * videoMessage) — mensagens de texto puro (`conversation`) não carregam.
+ * próprio app do WhatsApp mostrar o preview do anúncio no topo do chat.
+ *
+ * Onde exatamente esse campo aparece no JSON varia — depende da versão da
+ * Evolution API/Baileys e do tipo de mensagem (texto simples, botão,
+ * catálogo etc.), e já vimos lead de anúncio de verdade chegar sem o
+ * `externalAdReply` nos 3 caminhos "oficiais" que a documentação descreve.
+ * Em vez de apostar num caminho fixo (frágil — qualquer mudança de formato
+ * quebra de novo), procura `externalAdReply` em QUALQUER lugar dentro do
+ * payload inteiro da mensagem, não só dentro de `message`.
  */
-function extrairAnuncio(msg) {
-  const contextInfo =
-    msg.extendedTextMessage?.contextInfo ?? msg.imageMessage?.contextInfo ?? msg.videoMessage?.contextInfo ?? null;
-  const ad = contextInfo?.externalAdReply;
-  if (!ad) return null;
-  return {
-    ctwaClid: ad.ctwaClid || ad.ctwa_clid || null,
-    titulo: ad.title ?? null,
-    sourceId: ad.sourceId ?? null,
-  };
+function buscarAnuncioProfundo(valor, profundidade = 0) {
+  if (!valor || typeof valor !== "object" || profundidade > 8) return null;
+  if (valor.externalAdReply && typeof valor.externalAdReply === "object") {
+    const ad = valor.externalAdReply;
+    return {
+      ctwaClid: ad.ctwaClid || ad.ctwa_clid || null,
+      titulo: ad.title ?? null,
+      sourceId: ad.sourceId ?? null,
+    };
+  }
+  for (const chave of Object.keys(valor)) {
+    const achado = buscarAnuncioProfundo(valor[chave], profundidade + 1);
+    if (achado) return achado;
+  }
+  return null;
 }
 
 /**
@@ -244,6 +255,6 @@ export function normalizarPayloadInbound(bruto) {
   );
   const deMim = dado.key?.fromMe === true;
   const nome = dado.pushName ?? undefined;
-  const anuncio = extrairAnuncio(msg);
+  const anuncio = buscarAnuncioProfundo(dado);
   return { telefone, texto, deMim, grupo, nome, anuncio };
 }

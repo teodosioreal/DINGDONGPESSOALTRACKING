@@ -150,6 +150,26 @@ export function arquivarConversa(empresaId, id) {
   db.prepare("UPDATE conversas SET arquivada = 1 WHERE id = ? AND empresa_id = ?").run(id, empresaId);
 }
 
+/**
+ * Segunda forma de marcar origem, pra quando a detecção automática (código
+ * de rastreio / contexto de anúncio do WhatsApp) falha mas a empresa SABE de
+ * onde o lead veio (o próprio cliente disse "vi o anúncio", por exemplo). Só
+ * funciona numa conversa ainda "sem_rastreio" — não sobrescreve rastreio de
+ * verdade. Importante: isso é só rótulo aqui dentro do DingDong, pra
+ * aparecer certo nas listas — NÃO manda conversão pra Google/Meta (isso
+ * exige gclid/fbclid/ctwa_clid de verdade, que aqui não existe).
+ */
+export function marcarOrigemManual(empresaId, id, origem) {
+  if (origem !== "google" && origem !== "meta") return { ok: false, erro: "Origem inválida." };
+  const conversa = buscarConversa(empresaId, id);
+  if (!conversa) return { ok: false, erro: "Conversa não encontrada." };
+  if (conversa.origem !== "sem_rastreio") {
+    return { ok: false, erro: "Essa conversa já tem rastreio automático — não dá pra sobrescrever manualmente." };
+  }
+  db.prepare("UPDATE conversas SET origem = ?, atualizado_em = datetime('now') WHERE id = ?").run(origem, id);
+  return { ok: true };
+}
+
 export function desarquivarConversa(empresaId, id) {
   db.prepare("UPDATE conversas SET arquivada = 0 WHERE id = ? AND empresa_id = ?").run(id, empresaId);
 }

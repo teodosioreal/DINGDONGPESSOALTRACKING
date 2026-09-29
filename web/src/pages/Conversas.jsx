@@ -31,6 +31,7 @@ export default function Conversas() {
   const [aviso, setAviso] = useState("");
   const [limpandoTudo, setLimpandoTudo] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
+  const [marcandoOrigem, setMarcandoOrigem] = useState(false);
 
   useEffect(() => {
     setConversas([]);
@@ -110,6 +111,21 @@ export default function Conversas() {
     setSelecionada(null);
     setMensagens([]);
     carregarLista();
+  }
+
+  async function marcarOrigem(origem) {
+    if (!selecionada) return;
+    setMarcandoOrigem(true);
+    setAviso("");
+    try {
+      await api.marcarOrigemManual(empresaId, selecionada.id, origem);
+      setSelecionada((s) => ({ ...s, origem }));
+      carregarLista();
+    } catch (e) {
+      setAviso(e.message);
+    } finally {
+      setMarcandoOrigem(false);
+    }
   }
 
   async function limparTudo() {
@@ -278,6 +294,33 @@ export default function Conversas() {
                 Detectamos uma possível venda nessa conversa pela regra de palavra-chave. Confirme o valor e clique em
                 "Confirmar venda", ou descarte se estiver errado.
               </p>
+            )}
+            {selecionada.origem === "sem_rastreio" && (
+              <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-800/60">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Não achamos código de rastreio nem contexto de anúncio nessa conversa. Se o cliente confirmou que veio
+                  de anúncio, pode marcar manualmente abaixo — isso só ajuda a organizar aqui dentro, não envia conversão
+                  automática pra plataforma (isso só acontece com clique de anúncio de verdade).
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => marcarOrigem("google")}
+                    disabled={marcandoOrigem}
+                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Marcar como Google Ads
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => marcarOrigem("meta")}
+                    disabled={marcandoOrigem}
+                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Marcar como Meta Ads
+                  </button>
+                </div>
+              </div>
             )}
             {aviso && (
               <p className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">

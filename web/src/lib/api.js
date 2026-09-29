@@ -101,6 +101,8 @@ export const api = {
     chamar(`/api/empresas/${empresaId}/conversas/${id}/arquivar`, { method: "POST" }),
   desarquivarConversa: (empresaId, id) =>
     chamar(`/api/empresas/${empresaId}/conversas/${id}/desarquivar`, { method: "POST" }),
+  marcarOrigemManual: (empresaId, id, origem) =>
+    chamar(`/api/empresas/${empresaId}/conversas/${id}/origem`, { method: "POST", body: { origem } }),
   conversasNaoLidas: (empresaId) => chamar(`/api/empresas/${empresaId}/conversas/nao-lidas`),
   eventosRecentes: (empresaId, desde) =>
     chamar(

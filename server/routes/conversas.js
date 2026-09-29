@@ -15,6 +15,7 @@ import {
   apagarTodasConversas,
   arquivarConversa,
   desarquivarConversa,
+  marcarOrigemManual,
 } from "../conversas.js";
 import { enviarMensagem } from "../whatsapp.js";
 import { marcarConversaLida, contarConversasNaoLidas, checklistSetup, contarIpsBloqueados } from "../db.js";
@@ -86,6 +87,18 @@ conversasRouter.post("/:id/desarquivar", (req, res) => {
   const conversa = buscarConversa(req.empresaId, req.params.id);
   if (!conversa) return res.status(404).json({ erro: "Conversa não encontrada." });
   desarquivarConversa(req.empresaId, conversa.id);
+  res.json({ ok: true });
+});
+
+/**
+ * Segunda forma de marcar origem quando a detecção automática falha mas a
+ * empresa sabe de onde o lead veio — só rótulo aqui dentro, não manda
+ * conversão (isso exige gclid/fbclid/ctwa_clid de verdade).
+ */
+conversasRouter.post("/:id/origem", (req, res) => {
+  const origem = String(req.body?.origem ?? "");
+  const r = marcarOrigemManual(req.empresaId, req.params.id, origem);
+  if (!r.ok) return res.status(400).json({ erro: r.erro });
   res.json({ ok: true });
 });
 
