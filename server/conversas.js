@@ -31,8 +31,16 @@ function conversaDoTelefone(empresaId, telefone, nome) {
  * Processa uma mensagem recebida: cria/atualiza a conversa, tenta achar o
  * código de rastreio na primeira mensagem (vindo do link do WhatsApp),
  * grava o histórico e roda a detecção de venda por palavra-chave.
+ *
+ * `payloadBruto`, se vier, é o corpo inteiro do webhook como chegou da
+ * Evolution API — só é guardado (em `debug_payload`) quando a mensagem NÃO
+ * bate nem com código de rastreio nem com contexto de anúncio, ou seja,
+ * quando a detecção falhou de algum jeito ainda não mapeado. Isso dá um jeito
+ * de capturar o formato exato do próximo caso "deveria ter marcado e não
+ * marcou" sem precisar acesso direto ao servidor/banco de produção — o
+ * próprio usuário consegue ver e copiar esse JSON pela tela.
  */
-export async function registrarMensagemRecebida(empresa, { telefone, texto, nome, anuncio }) {
+export async function registrarMensagemRecebida(empresa, { telefone, texto, nome, anuncio, payloadBruto }) {
   const empresaId = empresa.id;
   let conversa = conversaDoTelefone(empresaId, telefone, nome);
 
@@ -52,6 +60,11 @@ export async function registrarMensagemRecebida(empresa, { telefone, texto, nome
       db.prepare(
         "UPDATE conversas SET origem = 'meta', ctwa_clid = ?, atualizado_em = datetime('now') WHERE id = ?",
       ).run(anuncio.ctwaClid, conversa.id);
+    } else if (payloadBruto) {
+      db.prepare("UPDATE conversas SET debug_payload = ? WHERE id = ?").run(
+        JSON.stringify(payloadBruto),
+        conversa.id,
+      );
     }
   }
 

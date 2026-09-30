@@ -32,6 +32,7 @@ export default function Conversas() {
   const [limpandoTudo, setLimpandoTudo] = useState(false);
   const [verArquivadas, setVerArquivadas] = useState(false);
   const [marcandoOrigem, setMarcandoOrigem] = useState(false);
+  const [payloadCopiado, setPayloadCopiado] = useState(false);
 
   useEffect(() => {
     setConversas([]);
@@ -125,6 +126,16 @@ export default function Conversas() {
       setAviso(e.message);
     } finally {
       setMarcandoOrigem(false);
+    }
+  }
+
+  async function copiarPayload(texto) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      setPayloadCopiado(true);
+      setTimeout(() => setPayloadCopiado(false), 2000);
+    } catch {
+      // Clipboard bloqueado (ex: sem permissão) — o texto já está visível pra selecionar/copiar manualmente.
     }
   }
 
@@ -320,6 +331,25 @@ export default function Conversas() {
                     Marcar como Meta Ads
                   </button>
                 </div>
+                {selecionada.debug_payload && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                      Dados técnicos dessa mensagem (pra investigar por que não achou rastreio)
+                    </summary>
+                    <div className="mt-1 space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => copiarPayload(selecionada.debug_payload)}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        {payloadCopiado ? "Copiado!" : "Copiar"}
+                      </button>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-slate-900 p-2 text-[11px] text-slate-100">
+                        {selecionada.debug_payload}
+                      </pre>
+                    </div>
+                  </details>
+                )}
               </div>
             )}
             {aviso && (
